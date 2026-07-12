@@ -1,7 +1,45 @@
+# Local environment
 .env
-.env.local
-.venv/
-.data/
-.run/
-logs/
+.env.*
+!.env.example
+!*.env.example
+/.venv/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Tool caches
+/.uv-cache/
+/.cache/
+
+# Runtime state
+/.data/
+/.run/
+/logs/
+*.log
+
+# ComfyUI / AI generated assets
+/assets/
+/models/
+/downloads/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.gguf
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
