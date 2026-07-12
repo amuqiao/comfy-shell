@@ -1,6 +1,7 @@
 .env
 .env.local
 .venv/
+.data/
 .run/
 logs/
 

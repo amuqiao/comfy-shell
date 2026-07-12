@@ -143,7 +143,7 @@ scheduled from the UI.
 
 ## Business Tutorial
 
-The tutorial path starts from the AI heroine short-video MVP. Start here:
+The tutorial path starts from the AI heroine short-video MVP and uses ComfyUI page templates or existing workflows before model-catalog automation. Start here:
 
 ```text
 docs/tutorials/README.md

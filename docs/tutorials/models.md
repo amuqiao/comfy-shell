@@ -1,21 +1,67 @@
 # 模型管理
 
-模型管理的目标是让 ComfyUI 能稳定找到模型，并让 Mac 本机和服务器以后能复用同一套目录规则。
+模型管理的目标是让 ComfyUI workflow 能找到所需权重文件。MVP 阶段不要先研究模型包，先按页面缺失提示把业务流程跑通。
 
-## 当前心智模型
-
-模型按业务环节管理：
+## 先分清对象
 
 ```text
-女主身份图 / 首帧
-变装 / 试穿
-图生视频主线
-文生视频探索
+页面模板 / workflow
+  -> 在 http://127.0.0.1:8188/ 里打开、导入、点击「Queue / 队列 / 加入队列」的节点流程
+
+模型文件
+  -> workflow 运行时加载的权重
+  -> 放在 ComfyUI/models/ 下
+
+models.sh bundle
+  -> comfy-shell 为复现准备的模型清单
+  -> 例如 heroine-i2v-core
+  -> 不是页面模板，不是 workflow
 ```
 
-当前只有视频主线模型包已经标准化进 `configs/models/catalog.yaml`。图片生成、图片编辑、试穿模型包还在探索阶段，文档里不会把它们写成可执行脚本包。
+所以顺序是：
 
-## 基本目录
+```text
+先选模板或导入 workflow
+-> 页面提示缺什么模型
+-> 补齐缺失模型
+-> 跑通成片
+-> 再把常用模型清单沉淀到 configs/models/catalog.yaml
+```
+
+## MVP 阶段怎么补模型
+
+页面补模型适合探索和跑通：
+
+1. 打开 ComfyUI。
+2. 从「模板 / 所有模板 / Popular / 使用案例 / 生成类型 -> 视频」、blueprints 或社区 workflow 导入业务 workflow。
+3. 点击 `Queue / 队列 / 加入队列`。
+4. 如果页面提示缺少模型，先看缺失模型名和节点提示目录。
+5. 通过 ComfyUI-Manager、页面下载入口或 workflow 提供的模型提示补齐。
+6. 只从可信发布源下载模型，记录模型来源、链接和许可证；避免来源不明的镜像包或分享包。
+7. 下载完成后重启 ComfyUI 或刷新模型列表。
+8. 再次点击 `Queue / 队列 / 加入队列`。
+
+MVP 阶段只要回答这个问题：
+
+```text
+当前 workflow 还缺什么模型？
+```
+
+不要先问：
+
+```text
+我要不要维护 catalog？
+我要不要提前下载一整套 bundle？
+我要不要把 Mac 和服务器目录统一？
+```
+
+这些是跑通后的工程化问题。
+
+## 跑通后的工程化补充
+
+下面内容用于跑通后复现和迁移，不是第一条成片的阻塞项。
+
+### 基本目录
 
 不要把所有模型都放进一个目录。按模型类型放置：
 
@@ -30,24 +76,32 @@ ComfyUI/models/controlnet/         ControlNet / Canny / Depth
 ComfyUI/models/upscale_models/     放大模型
 ```
 
-工作流报 missing model 时，先看节点名称和模型类型，再检查目录。
+如果页面提示 `missing model / 缺少模型`，先看节点提示的模型类型，再检查对应目录。
 
-## 已落地模型包
+### models.sh 什么时候用
 
-可用 `models.sh` 管理：
+`models.sh` 是可选复现工具。它适合在你已经跑通一条 workflow 以后使用：
 
-| bundle | 作用 | 当前状态 |
+```text
+我已经知道要长期复用哪条 workflow
+我已经知道它需要哪些模型
+我想在 Mac 和服务器上复现同一套模型
+我不想每次都靠页面提示手工补模型
+```
+
+当前已落地的 bundle：
+
+| bundle | 作用 | 说明 |
 |---|---|---|
-| `heroine-i2v-core` | AI 女主图生视频主线 | 已落地 |
-| `heroine-t2v-explore` | 文生视频探索，不作为主生产路径 | 已落地 |
+| `heroine-i2v-core` | 图生视频主线模型包 | 给 `scripts/models.sh` 用，不是页面模板 |
+| `heroine-t2v-explore` | 文生视频探索模型包 | 非主路径 |
 
-常用命令：
+只读查看：
 
 ```bash
 ./scripts/models.sh list
 ./scripts/models.sh status
 ./scripts/models.sh plan heroine-i2v-core
-./scripts/models.sh status heroine-i2v-core
 ```
 
 显式下载：
@@ -56,16 +110,18 @@ ComfyUI/models/upscale_models/     放大模型
 HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
 ```
 
-视频模型较大，下载前先看计划和磁盘空间：
+注意：
 
-```bash
-./scripts/models.sh plan heroine-i2v-core
-df -h ComfyUI/models
+```text
+models.sh 不会选择 workflow
+models.sh 不会打开 ComfyUI 页面
+models.sh 不会替你判断社区 workflow 是否可信
+models.sh 不会被 dev.sh bootstrap 自动调用
 ```
 
-## 规划中模型包
+### 后续再沉淀的模型包
 
-这些名字可以作为后续 catalog 目标，但当前不是可执行 bundle：
+这些名字可以作为后续 catalog 目标，但当前不是 MVP 必需项：
 
 ```text
 heroine-image-core       女主身份图、封面、首帧
@@ -73,41 +129,9 @@ heroine-image-edit       变装、局部编辑
 heroine-fashion-tryon    商品试穿
 ```
 
-这些阶段先通过页面模板、ComfyUI-Manager 或社区热门 workflow 探索。等某条 workflow 稳定后，再把它的模型清单沉淀到 `configs/models/catalog.yaml`。
+这些阶段先通过页面模板、ComfyUI-Manager 或社区 workflow 探索。等某条 workflow 稳定后，再把它的模型清单沉淀到 `configs/models/catalog.yaml`。
 
-## 页面下载模型
-
-页面下载适合探索和补缺：
-
-1. 打开 ComfyUI。
-2. 导入业务 workflow、模板或自带蓝图。
-3. 如果页面提示缺少模型，先看节点提示的模型名和目录。
-4. 通过 ComfyUI-Manager 或 workflow 的模型提示下载。
-5. 下载完成后重启 ComfyUI，刷新模型列表。
-
-常用模型最后应沉淀到 `configs/models/catalog.yaml`，否则 Mac 和服务器很难复现。
-
-## models.sh 边界
-
-`models.sh` 只做显式模型资产管理：
-
-```text
-list/status/plan   只读，不访问网络
-download           显式下载，写入 ComfyUI/models 下的模型资产目录
-```
-
-它不会被 `dev.sh bootstrap` 自动调用，也不会静默下载大文件。
-
-它不负责：
-
-```text
-自动安装 third-party custom_nodes
-自动选择 workflow
-自动迁移模型目录
-判断社区 workflow 是否可信
-```
-
-## 服务器阶段怎么放
+### 服务器阶段怎么放
 
 服务器磁盘更适合放大模型。建议统一放到数据盘：
 
@@ -117,7 +141,7 @@ download           显式下载，写入 ComfyUI/models 下的模型资产目录
 
 不要放到系统盘或用户家目录。视频模型和 Flux/Wan 类模型很容易占几十 GB。
 
-## 什么时候使用 extra_model_paths.yaml
+### 什么时候使用 extra_model_paths.yaml
 
 当模型变多，或你希望 Mac 和服务器共用同一套模型仓库时，再使用 `extra_model_paths.yaml`。
 
@@ -134,14 +158,4 @@ download           显式下载，写入 ComfyUI/models 下的模型资产目录
   upscale_models/
 ```
 
-然后让 ComfyUI 通过 `extra_model_paths.yaml` 读取这个外部目录。
-
-本机实践阶段可以暂时不做这一步，避免把重点从作品转移到目录配置。
-
-## 推荐习惯
-
-- 下载一个模型后，立即记录它用于哪个业务 workflow。
-- 每个作品保存 workflow JSON。
-- 女主参考图、变装关键帧、视频首帧要放进 `assets/heroine/`，不要只留在 `ComfyUI/output/`。
-- 不常用的大模型先移到归档目录，不要长期堆在默认目录。
-- 服务器上定期检查磁盘空间。
+本机 MVP 阶段可以暂时不做这一步，避免把重点从成片转移到目录配置。
