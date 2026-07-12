@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>一文读懂 ComfyUI — 节点式 AI 生成工作流引擎</title>
+<style>
+  /* ============ 设计令牌:取自 ComfyUI 编辑器本身 ============ */
+  :root{
+    --canvas:#131417;          /* litegraph 画布底色 */
+    --node:#212329;            /* 节点卡片 */
+    --node-header:#2b2e36;     /* 节点标题栏 */
+    --line:#383c46;            /* 边框 */
+    --text:#e7e9ee;
+    --muted:#9aa1ad;
+    --dim:#6b7280;
+    /* ComfyUI 数据类型端口色(与真实编辑器一致) */
+    --c-model:#b39ddb;   /* MODEL */
+    --c-clip:#ffd500;    /* CLIP */
+    --c-vae:#ff6e6e;     /* VAE */
+    --c-cond:#ffa931;    /* CONDITIONING */
+    --c-latent:#ff9cf9;  /* LATENT */
+    --c-image:#64b5f6;   /* IMAGE */
+    --ok:#7ee081;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,"JetBrains Mono",Menlo,monospace;
+    --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  }
+  body{
+    background:var(--canvas);
+    /* 节点编辑器的点阵网格 */
+    background-image:radial-gradient(circle,#23262c 1px,transparent 1px);
+    background-size:24px 24px;
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:16px;line-height:1.75;
+  }
+  ::selection{background:#3d5afe55}
+  a{color:var(--c-image);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,pre,kbd{font-family:var(--mono)}
+  code{background:#2a2d35;border:1px solid var(--line);border-radius:4px;padding:.08em .4em;font-size:.86em;color:#ffd08a}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+
+  /* ============ 顶部导航 ============ */
+  nav{position:sticky;top:0;z-index:50;background:rgba(19,20,23,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:6px;height:52px;overflow-x:auto;scrollbar-width:none}
+  nav .wrap::-webkit-scrollbar{display:none}
+  .brand{font-family:var(--mono);font-weight:700;font-size:14px;white-space:nowrap;margin-right:10px}
+  .brand i{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c-latent);margin-right:7px}
+  nav a.tab{font-size:13px;color:var(--muted);padding:4px 10px;border-radius:6px;white-space:nowrap}
+  nav a.tab:hover{color:var(--text);background:#2a2d35;text-decoration:none}
+
+  /* ============ 首屏 ============ */
+  header{padding:64px 0 30px;text-align:center}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase}
+  h1{font-size:clamp(30px,5.4vw,52px);font-weight:800;letter-spacing:.01em;margin:14px 0 6px}
+  h1 .comfy{background:linear-gradient(92deg,var(--c-latent),var(--c-image) 55%,var(--c-clip));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);max-width:640px;margin:10px auto 0;font-size:16.5px}
+  .sub b{color:var(--text);font-weight:600}
+  .meta-tags{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:20px}
+  .meta-tags span{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);background:var(--node);border-radius:999px;padding:3px 12px}
+
+  /* ============ 首屏交互画布 ============ */
+  .hero-canvas{max-width:1100px;margin:26px auto 0;padding:0 16px}
+  .canvas-frame{position:relative;border:1px solid var(--line);border-radius:14px;background:#17181c;overflow:hidden;box-shadow:0 24px 60px -24px #000}
+  .canvas-frame::before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle,#24272e 1px,transparent 1px);background-size:22px 22px;pointer-events:none}
+  .canvas-bar{position:relative;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:#1c1e23;flex-wrap:wrap}
+  .canvas-bar .dots{display:flex;gap:6px}
+  .canvas-bar .dots i{width:10px;height:10px;border-radius:50%;background:#3a3e47}
+  .canvas-bar .file{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .queue-btn{margin-left:auto;font-family:var(--mono);font-size:13px;font-weight:700;color:#10131a;background:linear-gradient(180deg,#8de88f,#5fc76a);border:none;border-radius:8px;padding:7px 16px;cursor:pointer;transition:filter .15s, transform .1s}
+  .queue-btn:hover{filter:brightness(1.08)}
+  .queue-btn:active{transform:translateY(1px)}
+  .queue-btn:disabled{filter:grayscale(.6) brightness(.8);cursor:default}
+  .queue-btn:focus-visible,button:focus-visible,.layer-head:focus-visible,.tab-btn:focus-visible{outline:2px solid var(--c-image);outline-offset:2px}
+  .exec-log{font-family:var(--mono);font-size:12px;color:var(--ok);min-width:150px;flex:1}
+  #heroSvg{position:relative;display:block;width:100%;height:auto}
+  /* SVG 节点样式 */
+  .n-box{fill:var(--node);stroke:#3c414c;stroke-width:1.2;rx:9}
+  .n-head{fill:var(--node-header)}
+  .n-title{fill:#dfe3ea;font-family:var(--mono);font-size:12.5px;font-weight:700}
+  .n-io{fill:#aab1bd;font-family:var(--mono);font-size:10.5px}
+  .n-val{fill:#7f8896;font-family:var(--mono);font-size:10px}
+  .wire{fill:none;stroke-width:2.4;opacity:.85}
+  .node-g{transition:filter .25s}
+  .node-g.running .n-box{stroke:var(--ok);stroke-width:2}
+  .node-g.running{filter:drop-shadow(0 0 10px rgba(126,224,129,.55))}
+  .node-g.done .n-box{stroke:#5a8f60}
+  .wire.flow{stroke-dasharray:7 6;animation:dashmove .5s linear infinite}
+  @keyframes dashmove{to{stroke-dashoffset:-13}}
+  .canvas-hint{position:relative;text-align:center;font-size:13px;color:var(--dim);padding:8px 14px 12px}
+  .legend{position:relative;display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;padding:0 12px 14px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+  /* ============ 章节 = 节点卡片 ============ */
+  main{padding:44px 0 80px}
+  section.node-card{background:var(--node);border:1px solid var(--line);border-radius:12px;margin:0 0 46px;box-shadow:0 14px 40px -22px #000;overflow:hidden}
+  .card-head{display:flex;align-items:center;gap:10px;background:var(--node-header);border-bottom:1px solid var(--line);padding:12px 20px}
+  .card-head .port{width:11px;height:11px;border-radius:50%;flex:none}
+  .card-head h2{font-size:19px;font-weight:700;letter-spacing:.02em}
+  .card-head .ntype{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+  .card-body{padding:24px 24px 28px}
+  .card-body>p{margin:0 0 14px;color:#c9cdd6}
+  .card-body>p:last-child{margin-bottom:0}
+  h3{font-size:15.5px;margin:22px 0 10px;color:var(--text)}
+  h3 code{font-size:.9em}
+  .hl{color:var(--text);font-weight:600}
+
+  /* 对比双栏 */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+  .duo>div{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:#1b1d22}
+  .duo h4{font-size:14px;margin-bottom:8px;font-family:var(--mono)}
+  .duo ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px}
+  .duo li{margin:4px 0}
+  .duo .is h4{color:var(--ok)}
+  .duo .isnt h4{color:#ff8a80}
+
+  /* 流水线 */
+  .pipeline{display:flex;align-items:stretch;gap:0;margin:18px 0 6px;overflow-x:auto;padding-bottom:6px}
+  .stage{flex:1;min-width:128px;border:1px solid var(--line);background:#1b1d22;border-radius:10px;padding:12px 12px 10px;cursor:pointer;transition:border-color .15s,transform .15s;position:relative}
+  .stage:hover{border-color:#565c69;transform:translateY(-2px)}
+  .stage.active{border-color:var(--stage-c,#888);box-shadow:0 0 0 1px var(--stage-c)}
+  .stage .tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--stage-c,#888)}
+  .stage b{display:block;font-size:14px;margin:3px 0 2px}
+  .stage span{font-size:12px;color:var(--dim);font-family:var(--mono)}
+  .arrow{align-self:center;color:#4a4f5a;padding:0 7px;flex:none;font-family:var(--mono)}
+  .stage-detail{border:1px dashed var(--line);border-radius:10px;background:#17191d;padding:16px 18px;margin-top:12px;font-size:14.5px;color:#c9cdd6;min-height:76px}
+  .stage-detail b{color:var(--text)}
+
+  /* 去噪滑块 */
+  .denoise{display:flex;gap:22px;align-items:center;margin-top:20px;flex-wrap:wrap}
+  .denoise-view{position:relative;width:230px;height:154px;border-radius:10px;overflow:hidden;border:1px solid var(--line);flex:none}
+  .denoise-img{position:absolute;inset:0;background:
+      radial-gradient(120px 90px at 30% 72%,#f7b267 0%,transparent 60%),
+      radial-gradient(90px 70px at 72% 30%,#ffd166 0%,transparent 55%),
+      linear-gradient(178deg,#7bb7e0 0%,#a3d3f2 34%,#e9c46a 62%,#c1794f 100%)}
+  .denoise-mount{position:absolute;left:0;right:0;bottom:0;height:62%;
+      clip-path:polygon(0 100%,0 62%,16% 34%,30% 58%,45% 22%,60% 52%,74% 30%,88% 55%,100% 40%,100% 100%);
+      background:linear-gradient(180deg,#4a5568,#2d3748)}
+  .denoise-noise{position:absolute;inset:0;mix-blend-mode:normal}
+  .denoise-ctrl{flex:1;min-width:230px}
+  .denoise-ctrl label{font-family:var(--mono);font-size:12.5px;color:var(--muted);display:block;margin-bottom:8px}
+  .denoise-ctrl input[type=range]{width:100%;accent-color:var(--c-latent)}
+  .denoise-ctrl .step-note{font-size:13px;color:var(--dim);margin-top:8px}
+
+  /* 缓存演示 */
+  .cache-demo{border:1px solid var(--line);border-radius:10px;background:#17191d;padding:18px;margin-top:14px}
+  .cache-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .cache-row button{font-family:var(--mono);font-size:12.5px;background:#262932;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:6px 12px;cursor:pointer}
+  .cache-row button:hover{border-color:#5b6170}
+  .cache-nodes{display:flex;align-items:center;gap:0;overflow-x:auto;padding-bottom:4px}
+  .cnode{flex:none;font-family:var(--mono);font-size:12px;border:1.6px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--node);transition:all .2s;white-space:nowrap}
+  .cnode.hit{border-color:#3f7a46;color:var(--ok)}
+  .cnode.recalc{border-color:var(--c-cond);color:var(--c-cond);box-shadow:0 0 10px rgba(255,169,49,.25)}
+  .cache-legend{font-size:12.5px;color:var(--dim);margin-top:12px;font-family:var(--mono)}
+  .cache-legend .h{color:var(--ok)} .cache-legend .r{color:var(--c-cond)}
+
+  /* 分层架构 */
+  .layers{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+  .layer{border:1px solid var(--line);border-left:4px solid var(--lc,#888);border-radius:9px;background:#1b1d22;overflow:hidden}
+  .layer-head{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;user-select:none;background:none;border:none;width:100%;text-align:left;color:var(--text);font:inherit}
+  .layer-head:hover{background:#20232a}
+  .layer-head .lnum{font-family:var(--mono);font-size:11px;color:var(--lc);letter-spacing:.1em;flex:none;width:26px}
+  .layer-head b{font-size:14.5px}
+  .layer-head .lfile{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--dim);white-space:nowrap}
+  .layer-head .chev{color:var(--dim);flex:none;transition:transform .2s;font-size:12px}
+  .layer.open .chev{transform:rotate(90deg)}
+  .layer-body{display:none;padding:2px 18px 15px 54px;color:var(--muted);font-size:14px;line-height:1.7}
+  .layer.open .layer-body{display:block}
+  .layer-body code{font-size:.84em}
+
+  /* 技术栈三列 / 功能网格 */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+  .grid3>div{border:1px solid var(--line);border-radius:10px;background:#1b1d22;padding:16px 18px}
+  .grid3 h4{font-family:var(--mono);font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .grid3 h4 i{width:9px;height:9px;border-radius:50%}
+  .grid3 ul{padding-left:16px;color:var(--muted);font-size:13.5px}
+  .grid3 li{margin:5px 0}
+  .grid3 li b{color:#d4d8e0;font-weight:600}
+  .feat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:12px;margin-top:14px}
+  .feat{border:1px solid var(--line);border-radius:10px;background:#1b1d22;padding:14px 16px}
+  .feat b{display:block;font-size:14px;margin-bottom:4px}
+  .feat p{font-size:12.8px;color:var(--muted);line-height:1.6}
+  .feat .fico{font-size:17px;margin-right:6px}
+
+  /* Tabs(典型用法) */
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:0;margin-top:6px}
+  .tab-btn{font-family:var(--mono);font-size:13px;background:none;border:1px solid transparent;border-bottom:none;color:var(--muted);padding:8px 14px;cursor:pointer;border-radius:8px 8px 0 0}
+  .tab-btn.on{color:var(--text);background:#1b1d22;border-color:var(--line);position:relative;top:1px}
+  .tab-pane{display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 10px 10px;background:#1b1d22;padding:18px 20px}
+  .tab-pane.on{display:block}
+  .tab-pane p{font-size:14px;color:#c9cdd6;margin-bottom:10px}
+  pre.code{position:relative;background:#111318;border:1px solid #2c303a;border-radius:9px;padding:15px 16px;overflow-x:auto;font-size:12.8px;line-height:1.65;color:#c7ccd8;margin:10px 0}
+  pre.code .cm{color:#616b7d}
+  pre.code .kw{color:#c792ea}
+  pre.code .st{color:#a5d6a7}
+  pre.code .fn{color:#82aaff}
+  pre.code .nb{color:#f7a066}
+  .copy{position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:11px;background:#262932;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 9px;cursor:pointer}
+  .copy:hover{color:var(--text)}
+
+  /* 目录树 */
+  .tree{font-family:var(--mono);font-size:12.8px;line-height:1.9;color:#aeb5c2;background:#111318;border:1px solid #2c303a;border-radius:9px;padding:16px 18px;overflow-x:auto}
+  .tree .d{color:#82aaff}.tree .note{color:#5d6673}
+
+  footer{border-top:1px solid var(--line);padding:30px 0 46px;text-align:center;color:var(--dim);font-size:13px}
+  footer .wrap{display:flex;flex-direction:column;gap:6px}
+
+  @media (max-width:760px){
+    .duo,.grid3{grid-template-columns:1fr}
+    .card-body{padding:18px 16px 22px}
+    header{padding:44px 0 20px}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <span class="brand"><i></i>一文读懂 ComfyUI</span>
+    <a class="tab" href="#what">是什么</a>
+    <a class="tab" href="#flow">核心数据流</a>
+    <a class="tab" href="#engine">执行原理</a>
+    <a class="tab" href="#arch">分层架构</a>
+    <a class="tab" href="#stack">技术栈</a>
+    <a class="tab" href="#feat">功能</a>
+    <a class="tab" href="#usage">用法与二开</a>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">github.com/comfyanonymous/ComfyUI · Comfy Org</div>
+    <h1>一文读懂 <span class="comfy">ComfyUI</span></h1>
+    <p class="sub">一个把 AI 生成过程<b>拆成节点、连成图</b>的开源引擎:每个节点是一步计算,每根连线是一份数据,整张图就是一条可保存、可复现、可编程的<b>生成流水线</b>。</p>
+    <div class="meta-tags">
+      <span>Python · PyTorch</span><span>GPL-3.0</span><span>80k+ Stars</span><span>节点图 = 工作流</span><span>图像 / 视频 / 音频</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 首屏:可运行的迷你工作流 ============ -->
+<div class="hero-canvas">
+  <div class="canvas-frame">
+    <div class="canvas-bar">
+      <span class="dots"><i></i><i></i><i></i></span>
+      <span class="file">workflow: text2img.json</span>
+      <span class="exec-log" id="execLog">点击 Queue Prompt,看一次真实的执行顺序 →</span>
+      <button class="queue-btn" id="queueBtn">▶ Queue Prompt</button>
+    </div>
+
+    <svg id="heroSvg" viewBox="0 0 1060 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ComfyUI 文生图工作流示意:Load Checkpoint 连接 CLIP Text Encode、KSampler、VAE Decode、Save Image">
+      <!-- 连线(在节点下层) -->
+      <g id="wires">
+        <path class="wire" data-w="w-model"  stroke="var(--c-model)"  d="M 218 96  C 300 96, 330 120, 560 120"/>
+        <path class="wire" data-w="w-clip1"  stroke="var(--c-clip)"   d="M 218 114 C 260 114, 240 78, 285 78"/>
+        <path class="wire" data-w="w-clip2"  stroke="var(--c-clip)"   d="M 218 114 C 262 114, 240 190, 285 190"/>
+        <path class="wire" data-w="w-vae"    stroke="var(--c-vae)"    d="M 218 132 C 420 132, 400 320, 785 320"/>
+        <path class="wire" data-w="w-pos"    stroke="var(--c-cond)"   d="M 508 96  C 535 96, 535 140, 560 140"/>
+        <path class="wire" data-w="w-neg"    stroke="var(--c-cond)"   d="M 508 208 C 535 208, 535 160, 560 160"/>
+        <path class="wire" data-w="w-latent" stroke="var(--c-latent)" d="M 508 322 C 540 322, 535 180, 560 180"/>
+        <path class="wire" data-w="w-samp"   stroke="var(--c-latent)" d="M 718 120 C 755 120, 750 300, 785 300"/>
+        <path class="wire" data-w="w-img"    stroke="var(--c-image)"  d="M 900 300 C 925 300, 925 300, 942 300"/>
+      </g>
+
+      <!-- Load Checkpoint -->
+      <g class="node-g" id="n-ckpt">
+        <rect class="n-box" x="60" y="60" width="158" height="92" rx="9"/>
+        <path class="n-head" d="M60 69 a9 9 0 0 1 9-9 h140 a9 9 0 0 1 9 9 v17 h-158 z"/>
+        <text class="n-title" x="72" y="79">Load Checkpoint</text>
+        <text class="n-io" x="150" y="100" text-anchor="end">MODEL</text><circle cx="218" cy="96" r="4.5" fill="var(--c-model)"/>
+        <text class="n-io" x="150" y="118" text-anchor="end">CLIP</text><circle cx="218" cy="114" r="4.5" fill="var(--c-clip)"/>
+        <text class="n-io" x="150" y="136" text-anchor="end">VAE</text><circle cx="218" cy="132" r="4.5" fill="var(--c-vae)"/>
+        <text class="n-val" x="72" y="147">sd_xl_base.safetensors</text>
+      </g>
+
+      <!-- CLIP Text Encode 正向 -->
+      <g class="node-g" id="n-pos">
+        <rect class="n-box" x="285" y="42" width="223" height="80" rx="9"/>
+        <path class="n-head" d="M285 51 a9 9 0 0 1 9-9 h205 a9 9 0 0 1 9 9 v17 h-223 z"/>
+        <text class="n-title" x="297" y="61">CLIP Text Encode (正向)</text>
+        <circle cx="285" cy="78" r="4.5" fill="var(--c-clip)"/><text class="n-io" x="296" y="82">clip</text>
+        <text class="n-io" x="498" y="100" text-anchor="end">COND</text><circle cx="508" cy="96" r="4.5" fill="var(--c-cond)"/>
+        <text class="n-val" x="297" y="113">"a cat in a spacesuit, 8k"</text>
+      </g>
+
+      <!-- CLIP Text Encode 负向 -->
+      <g class="node-g" id="n-neg">
+        <rect class="n-box" x="285" y="154" width="223" height="80" rx="9"/>
+        <path class="n-head" d="M285 163 a9 9 0 0 1 9-9 h205 a9 9 0 0 1 9 9 v17 h-223 z"/>
+        <text class="n-title" x="297" y="173">CLIP Text Encode (负向)</text>
+        <circle cx="285" cy="190" r="4.5" fill="var(--c-clip)"/><text class="n-io" x="296" y="194">clip</text>
+        <text class="n-io" x="498" y="212" text-anchor="end">COND</text><circle cx="508" cy="208" r="4.5" fill="var(--c-cond)"/>
+        <text class="n-val" x="297" y="225">"blurry, low quality"</text>
+      </g>
+
+      <!-- Empty Latent -->
+      <g class="node-g" id="n-latent">
+        <rect class="n-box" x="330" y="286" width="178" height="72" rx="9"/>
+        <path class="n-head" d="M330 295 a9 9 0 0 1 9-9 h160 a9 9 0 0 1 9 9 v17 h-178 z"/>
+        <text class="n-title" x="342" y="305">Empty Latent Image</text>
+        <text class="n-io" x="498" y="326" text-anchor="end">LATENT</text><circle cx="508" cy="322" r="4.5" fill="var(--c-latent)"/>
+        <text class="n-val" x="342" y="348">1024 × 1024 · batch 1</text>
+      </g>
+
+      <!-- KSampler -->
+      <g class="node-g" id="n-ksampler">
+        <rect class="n-box" x="560" y="84" width="158" height="130" rx="9"/>
+        <path class="n-head" d="M560 93 a9 9 0 0 1 9-9 h140 a9 9 0 0 1 9 9 v17 h-158 z"/>
+        <text class="n-title" x="572" y="103">KSampler</text>
+        <circle cx="560" cy="120" r="4.5" fill="var(--c-model)"/><text class="n-io" x="571" y="124">model</text>
+        <circle cx="560" cy="140" r="4.5" fill="var(--c-cond)"/><text class="n-io" x="571" y="144">positive</text>
+        <circle cx="560" cy="160" r="4.5" fill="var(--c-cond)"/><text class="n-io" x="571" y="164">negative</text>
+        <circle cx="560" cy="180" r="4.5" fill="var(--c-latent)"/><text class="n-io" x="571" y="184">latent</text>
+        <text class="n-io" x="708" y="124" text-anchor="end">LATENT</text><circle cx="718" cy="120" r="4.5" fill="var(--c-latent)"/>
+        <text class="n-val" x="572" y="203">steps 20 · cfg 7 · euler</text>
+      </g>
+
+      <!-- VAE Decode -->
+      <g class="node-g" id="n-vae">
+        <rect class="n-box" x="785" y="264" width="115" height="88" rx="9"/>
+        <path class="n-head" d="M785 273 a9 9 0 0 1 9-9 h97 a9 9 0 0 1 9 9 v17 h-115 z"/>
+        <text class="n-title" x="797" y="283">VAE Decode</text>
+        <circle cx="785" cy="300" r="4.5" fill="var(--c-latent)"/><text class="n-io" x="796" y="304">samples</text>
+        <circle cx="785" cy="320" r="4.5" fill="var(--c-vae)"/><text class="n-io" x="796" y="324">vae</text>
+        <text class="n-io" x="890" y="304" text-anchor="end">IMG</text><circle cx="900" cy="300" r="4.5" fill="var(--c-image)"/>
+      </g>
+
+      <!-- Save Image -->
+      <g class="node-g" id="n-save">
+        <rect class="n-box" x="942" y="240" width="106" height="118" rx="9"/>
+        <path class="n-head" d="M942 249 a9 9 0 0 1 9-9 h88 a9 9 0 0 1 9 9 v17 h-106 z"/>
+        <text class="n-title" x="954" y="259">Save Image</text>
+        <circle cx="942" cy="300" r="4.5" fill="var(--c-image)"/>
+        <g id="resultImg" opacity="0">
+          <rect x="956" y="276" width="78" height="68" rx="5" fill="url(#gimg)"/>
+          <circle cx="1016" cy="292" r="8" fill="#ffe9a8" opacity=".9"/>
+          <path d="M958 330 l18 -16 l14 11 l16 -14 l26 19 v12 a5 5 0 0 1 -5 5 h-64 a5 5 0 0 1 -5 -5 z" fill="#3f5d43"/>
+        </g>
+      </g>
+
+      <defs>
+        <linearGradient id="gimg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7bb7e0"/><stop offset=".55" stop-color="#b8d9ef"/><stop offset="1" stop-color="#628a67"/>
+        </linearGradient>
+      </defs>
+    </svg>
+
+    <div class="legend">
+      <span><i style="background:var(--c-model)"></i>MODEL</span>
+      <span><i style="background:var(--c-clip)"></i>CLIP</span>
+      <span><i style="background:var(--c-vae)"></i>VAE</span>
+      <span><i style="background:var(--c-cond)"></i>CONDITIONING</span>
+      <span><i style="background:var(--c-latent)"></i>LATENT</span>
+      <span><i style="background:var(--c-image)"></i>IMAGE</span>
+    </div>
+    <div class="canvas-hint">这就是 ComfyUI 里最经典的「文生图」工作流 —— 连线颜色 = 数据类型,类型对得上才允许连接。</div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- ============ 是什么 ============ -->
+  <section class="node-card" id="what">
+    <div class="card-head"><span class="port" style="background:var(--c-image)"></span><h2>它是什么,解决什么问题</h2><span class="ntype">POSITIONING</span></div>
+    <div class="card-body">
+      <p>ComfyUI 是一个<span class="hl">开源的节点式(node-based)AI 生成工作流引擎</span>,最初由 comfyanonymous 于 2023 年初发布,现由 Comfy Org 维护。它让你用「搭积木连线」的方式,自由组合 Stable Diffusion、Flux、SD3、各类视频/音频模型的每一个计算环节。</p>
+      <p>它要解决的核心问题是:<span class="hl">传统 WebUI 把生成流程写死成一张固定表单</span>——你只能填参数,不能改流程。而扩散模型的真实流程(编码 → 采样 → 解码)本质上是一条可任意重组的数据流水线。ComfyUI 把这条流水线「掀开」给你:每一步是节点,步骤间的数据是连线,想怎么组装就怎么组装,并且<span class="hl">整张图可以存成 JSON、嵌进 PNG、通过 API 复现</span>。</p>
+      <div class="duo">
+        <div class="is"><h4>✔ ComfyUI 是</h4>
+          <ul>
+            <li>可视化<b>工作流编辑器</b> + 后端<b>执行引擎</b>,两者可分离使用</li>
+            <li>本地优先、离线可跑的推理框架(也被云平台大量托管)</li>
+            <li>显存管理极强的运行时:8GB 甚至更低显存也能跑大模型(智能分块加载/卸载)</li>
+            <li>庞大生态的宿主:数千个社区 custom nodes 扩展一切能力</li>
+            <li>可编程后端:任何程序都能 <code>POST /prompt</code> 提交工作流</li>
+          </ul>
+        </div>
+        <div class="isnt"><h4>✘ ComfyUI 不是</h4>
+          <ul>
+            <li>不是模型本身——它不训练模型,只<b>加载与推理</b>已有权重</li>
+            <li>不是「一键出图」傻瓜工具——上手门槛高于 WebUI,换来的是自由度</li>
+            <li>不是通用工作流编排平台(如 Airflow)——它专为<b>生成式模型的张量数据流</b>设计</li>
+            <li>不只是画图界面——前端只是壳,核心价值在执行引擎与模型运行时</li>
+          </ul>
+        </div>
+      </div>
+      <p>一句话总结:<span class="hl">ComfyUI = 节点图前端 + DAG 执行引擎 + 扩散模型运行时</span>。理解了这三层,就理解了整个项目。下面顺着一张图的「一生」讲清楚。</p>
+    </div>
+  </section>
+
+  <!-- ============ 核心数据流 ============ -->
+  <section class="node-card" id="flow">
+    <div class="card-head"><span class="port" style="background:var(--c-latent)"></span><h2>核心数据流:一张图是怎么被算出来的</h2><span class="ntype">LATENT DIFFUSION</span></div>
+    <div class="card-body">
+      <p>ComfyUI 的节点不是随意发明的,它们<span class="hl">一一对应潜空间扩散模型(Latent Diffusion)的真实计算阶段</span>。首屏那 7 个节点,其实就是下面这条流水线。点击每个阶段查看细节:</p>
+
+      <div class="pipeline" id="pipeline">
+        <div class="stage active" style="--stage-c:var(--c-clip)" data-k="clip"><span class="tag">① ENCODE</span><b>文本编码</b><span>CLIP / T5</span></div>
+        <div class="arrow">→</div>
+        <div class="stage" style="--stage-c:var(--c-latent)" data-k="latent"><span class="tag">② INIT</span><b>初始潜空间</b><span>noise latent</span></div>
+        <div class="arrow">→</div>
+        <div class="stage" style="--stage-c:var(--c-model)" data-k="sample"><span class="tag">③ SAMPLE</span><b>迭代去噪</b><span>UNet / DiT</span></div>
+        <div class="arrow">→</div>
+        <div class="stage" style="--stage-c:var(--c-vae)" data-k="decode"><span class="tag">④ DECODE</span><b>解码成像</b><span>VAE</span></div>
+      </div>
+      <div class="stage-detail" id="stageDetail"></div>
+
+      <h3>亲手感受「去噪」:扩散模型的本质</h3>
+      <p style="color:#c9cdd6;font-size:14.5px">所谓「生成」,就是从纯噪声出发,让模型一步步预测并减去噪声,直到浮现出与文字描述匹配的图像。拖动滑块模拟 KSampler 的采样步:</p>
+      <div class="denoise">
+        <div class="denoise-view">
+          <div class="denoise-img"></div>
+          <div class="denoise-mount"></div>
+          <svg class="denoise-noise" id="noiseLayer" width="100%" height="100%" preserveAspectRatio="none">
+            <filter id="nz"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+            <rect width="100%" height="100%" filter="url(#nz)" id="noiseRect" opacity="1"/>
+          </svg>
+        </div>
+        <div class="denoise-ctrl">
+          <label>采样步数 step: <b id="stepNum" style="color:var(--c-latent)">0</b> / 20</label>
+          <input type="range" id="stepSlider" min="0" max="20" value="0" aria-label="采样步数">
+          <div class="step-note">每一步,采样器(euler、dpm++ 2m 等)按调度器给定的噪声水平,调用扩散模型预测噪声并从潜空间中移除。步数越多细节越收敛,但耗时线性增长——这就是 KSampler 节点上 <code>steps</code> / <code>sampler_name</code> / <code>scheduler</code> 三个参数的含义。</div>
+        </div>
+      </div>
+
+      <p style="margin-top:20px">关键洞察:这四个阶段之间流动的数据类型各不相同(文本 → <span style="color:var(--c-cond)">CONDITIONING</span>,噪声 → <span style="color:var(--c-latent)">LATENT</span>,图像 → <span style="color:var(--c-image)">IMAGE</span>)。ComfyUI 给<span class="hl">每种中间数据定义了强类型端口</span>,连线即类型检查——这就是为什么它能安全地让你重排流程:在采样前插入 ControlNet 注入构图、在 MODEL 上挂 LoRA 微调风格、把 VAE Decode 换成放大再解码……都是合法的图变换。</p>
+    </div>
+  </section>
+
+  <!-- ============ 执行原理 ============ -->
+  <section class="node-card" id="engine">
+    <div class="card-head"><span class="port" style="background:var(--ok)"></span><h2>执行原理:图如何变成计算</h2><span class="ntype">EXECUTION ENGINE</span></div>
+    <div class="card-body">
+      <p>点下 Queue Prompt 后发生了什么?前端把整张图序列化成一份 JSON(节点 id、类型、参数、连接关系),<code>POST /prompt</code> 发给后端;后端校验后放入<span class="hl">队列(PromptQueue)</span>,由执行器(<code>execution.py</code>)逐个消费:</p>
+      <p><span class="hl">1. 反向求值的拓扑执行</span> —— 执行器从<b>输出节点</b>(如 Save Image)出发,沿连线反向解析依赖,对 DAG 做拓扑排序,保证每个节点在其所有输入就绪后才执行。没有被任何输出依赖的「孤岛节点」根本不会运行——这是惰性求值。</p>
+      <p><span class="hl">2. 结果缓存(增量执行)</span> —— 每个节点的输出会以「节点参数 + 上游输入」为键缓存。再次排队时,只有<b>发生变化的节点及其下游</b>会重新计算。改个提示词,模型不会重新加载;改个种子,文本编码不会重跑。试试:</p>
+
+      <div class="cache-demo">
+        <div class="cache-row">
+          <button data-change="0">改 checkpoint 模型</button>
+          <button data-change="1">改正向提示词</button>
+          <button data-change="3">改 seed / steps</button>
+          <button data-change="-1">什么都不改,再次排队</button>
+        </div>
+        <div class="cache-nodes" id="cacheNodes">
+          <div class="cnode" data-i="0">Load Checkpoint</div><div class="arrow">→</div>
+          <div class="cnode" data-i="1">CLIP Encode</div><div class="arrow">→</div>
+          <div class="cnode" data-i="3">KSampler</div><div class="arrow">→</div>
+          <div class="cnode" data-i="4">VAE Decode</div><div class="arrow">→</div>
+          <div class="cnode" data-i="5">Save Image</div>
+        </div>
+        <div class="cache-legend">■ <span class="h">绿色 = 缓存命中,跳过</span> · ■ <span class="r">橙色 = 需要重新计算</span> <span id="cacheMsg"></span></div>
+      </div>
+
+      <h3>3. 智能显存管理(<code>comfy/model_management.py</code>)</h3>
+      <p>这是 ComfyUI 相比同类工具最硬核的部分:它统一调度 GPU 显存与系统内存,按需把模型权重在 CPU/GPU 之间<span class="hl">分块换入换出(offload)</span>,支持多种精度(FP16/BF16/FP8)与量化权重,并能只加载当前阶段用到的子模型。因此 SDXL、Flux 这类大模型能在消费级低显存显卡上跑起来,而不是简单地 OOM。</p>
+
+      <h3>4. 全程 WebSocket 反馈</h3>
+      <p>执行期间,后端通过 WebSocket 向前端推送 <code>executing</code>(当前节点)、<code>progress</code>(采样进度条)、<code>executed</code>(节点产物,如预览图)等事件——首屏动画里节点逐个变绿,就是在模拟这条事件流。任何外部程序监听同一条 WS,也能拿到完整执行状态,这是把 ComfyUI 当纯后端用的基础。</p>
+    </div>
+  </section>
+
+  <!-- ============ 分层架构 ============ -->
+  <section class="node-card" id="arch">
+    <div class="card-head"><span class="port" style="background:var(--c-model)"></span><h2>分层架构:从浏览器到显卡</h2><span class="ntype">ARCHITECTURE</span></div>
+    <div class="card-body">
+      <p>整个仓库可以读成自上而下的六层,层间边界清晰——<span class="hl">前端可整体替换、节点层可无限扩展、核心运行时保持稳定</span>。点击展开每一层:</p>
+      <div class="layers">
+        <div class="layer" style="--lc:var(--c-image)">
+          <button class="layer-head" aria-expanded="false"><span class="lnum">L6</span><b>前端 UI 层</b><span class="lfile">ComfyUI_frontend(独立仓库)</span><span class="chev">▶</span></button>
+          <div class="layer-body">基于 <code>Vue 3 + TypeScript + litegraph.js</code> 的节点画布:拖拽、连线、分组、子图、模板库、模型管理界面。前端已从主仓库拆分为独立项目,构建产物随主仓库分发;也存在第三方前端——因为它与后端之间只隔着一层 HTTP/WS 协议。桌面版(Electron 封装)与 Comfy Cloud 同样复用这一层。</div>
+        </div>
+        <div class="layer" style="--lc:#8fd3f4">
+          <button class="layer-head" aria-expanded="false"><span class="lnum">L5</span><b>API / 通信层</b><span class="lfile">server.py</span><span class="chev">▶</span></button>
+          <div class="layer-body">用 <code>aiohttp</code> 实现的异步 Web 服务:<code>POST /prompt</code> 提交工作流、<code>GET /history</code> 查询结果、<code>/upload/image</code>、<code>/view</code> 取产物,外加 WebSocket 通道推送执行事件。这一层让 ComfyUI 天然是一个「生成即服务」后端。</div>
+        </div>
+        <div class="layer" style="--lc:var(--ok)">
+          <button class="layer-head" aria-expanded="false"><span class="lnum">L4</span><b>执行引擎层</b><span class="lfile">execution.py · main.py</span><span class="chev">▶</span></button>
+          <div class="layer-body">队列管理(PromptQueue)、工作流 JSON 校验、DAG 拓扑排序、节点级缓存与增量执行、错误定位(报错精确到节点)。它不关心节点内部做什么,只负责「按依赖顺序、最小代价地把图跑完」。</div>
+        </div>
+        <div class="layer" style="--lc:var(--c-cond)">
+          <button class="layer-head" aria-expanded="false"><span class="lnum">L3</span><b>节点层</b><span class="lfile">nodes.py · comfy_extras/ · custom_nodes/</span><span class="chev">▶</span></button>
+          <div class="layer-body">所有能力的「原子单元」。内置节点(加载器、编码器、采样器、后处理等)定义在 <code>nodes.py</code> 与 <code>comfy_extras/</code>;第三方节点放进 <code>custom_nodes/</code> 目录即被自动扫描注册,与内置节点完全同权——这是生态爆发的架构原因。</div>
+        </div>
+        <div class="layer" style="--lc:var(--c-latent)">
+          <button class="layer-head" aria-expanded="false"><span class="lnum">L2</span><b>模型运行时核心</b><span class="lfile">comfy/</span><span class="chev">▶</span></button>
+          <div class="layer-body">项目的心脏:<code>sd.py</code>(模型装配)、<code>model_detection.py</code>(自动识别权重架构)、<code>samplers.py</code>(采样算法族)、<code>model_management.py</code>(显存调度)、<code>ldm/</code>(UNet/DiT/VAE 等网络实现)、<code>text_encoders/</code>(CLIP/T5 家族)。核心库以 <code>comfy</code> 包形式可被独立引用。</div>
+        </div>
+        <div class="layer" style="--lc:#a1887f">
+          <button class="layer-head" aria-expanded="false"><span class="lnum">L1</span><b>计算基座</b><span class="lfile">PyTorch</span><span class="chev">▶</span></button>
+          <div class="layer-body">PyTorch 抽象了硬件差异:NVIDIA CUDA、AMD ROCm、Apple Silicon MPS、Intel XPU,乃至纯 CPU 都能跑。权重文件以 <code>safetensors</code> 为主流格式,放置于 <code>models/checkpoints</code>、<code>models/loras</code> 等约定目录。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 技术栈 ============ -->
+  <section class="node-card" id="stack">
+    <div class="card-head"><span class="port" style="background:var(--c-clip)"></span><h2>技术栈速览</h2><span class="ntype">TECH STACK</span></div>
+    <div class="card-body">
+      <div class="grid3">
+        <div>
+          <h4><i style="background:var(--c-image)"></i>前端</h4>
+          <ul>
+            <li><b>Vue 3 + TypeScript</b>:应用框架(独立仓库维护)</li>
+            <li><b>litegraph.js</b>(深度定制):节点画布内核</li>
+            <li><b>WebSocket</b>:实时进度与预览</li>
+            <li><b>Electron</b>:官方桌面版封装</li>
+          </ul>
+        </div>
+        <div>
+          <h4><i style="background:var(--ok)"></i>后端</h4>
+          <ul>
+            <li><b>Python 3.9+</b>:全部服务端逻辑</li>
+            <li><b>aiohttp</b>:异步 HTTP + WS 服务</li>
+            <li><b>JSON 工作流</b>:图的序列化格式,可嵌入 PNG 元数据</li>
+            <li><b>comfy-cli / Manager</b>:安装与节点包管理生态</li>
+          </ul>
+        </div>
+        <div>
+          <h4><i style="background:var(--c-latent)"></i>推理</h4>
+          <ul>
+            <li><b>PyTorch</b>:张量计算与多后端硬件支持</li>
+            <li><b>safetensors</b>:安全权重格式</li>
+            <li><b>FP16 / BF16 / FP8 / 量化</b>:低显存运行手段</li>
+            <li><b>xFormers / PyTorch SDPA</b>:注意力加速</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 功能 ============ -->
+  <section class="node-card" id="feat">
+    <div class="card-head"><span class="port" style="background:var(--c-vae)"></span><h2>功能全景</h2><span class="ntype">CAPABILITIES</span></div>
+    <div class="card-body">
+      <p>功能 = 内置节点集 × 支持的模型家族。官方持续跟进新模型,通常发布数天内即可原生支持:</p>
+      <div class="feat-grid">
+        <div class="feat"><b><span class="fico">🖼</span>图像生成</b><p>SD1.5 / SD2 / SDXL / SD3.x / Flux / 混元 DiT / PixArt / Qwen-Image 等;文生图、图生图、局部重绘 inpaint / outpaint。</p></div>
+        <div class="feat"><b><span class="fico">🎬</span>视频生成</b><p>SVD、LTX-Video、HunyuanVideo、Wan、Mochi 等文/图生视频模型的工作流化支持。</p></div>
+        <div class="feat"><b><span class="fico">🎵</span>音频与 3D</b><p>Stable Audio 等音频生成;Hunyuan3D 等 3D 资产生成节点。</p></div>
+        <div class="feat"><b><span class="fico">🎛</span>精确控制</b><p>ControlNet(姿态/深度/边缘)、IP-Adapter 参考图、LoRA / 嵌入 / 超网络叠加、区域化提示。</p></div>
+        <div class="feat"><b><span class="fico">🔍</span>后处理</b><p>ESRGAN 系放大、面部修复类节点、色彩与合成操作,可与生成串在同一张图里。</p></div>
+        <div class="feat"><b><span class="fico">🧬</span>工作流即资产</b><p>图存为 JSON 或直接嵌入输出 PNG——拖一张别人的图进画布,即可完整复原其工作流。</p></div>
+        <div class="feat"><b><span class="fico">⚙️</span>工程特性</b><p>任务队列、断点续跑式缓存、错误定位到节点、<code>--lowvram</code> 等运行档位、无界面 headless 模式。</p></div>
+        <div class="feat"><b><span class="fico">🧩</span>生态</b><p>ComfyUI Manager 一键装节点/模型;Comfy Registry 收录数千 custom nodes;官方 Workflow 模板库。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 用法与二开 ============ -->
+  <section class="node-card" id="usage">
+    <div class="card-head"><span class="port" style="background:var(--c-cond)"></span><h2>典型使用方式与二次开发</h2><span class="ntype">USAGE & EXTEND</span></div>
+    <div class="card-body">
+      <p>四种由浅入深的打开方式——从纯用户到深度二开:</p>
+      <div class="tabs" role="tablist">
+        <button class="tab-btn on" data-t="t1" role="tab">① 装起来用</button>
+        <button class="tab-btn" data-t="t2" role="tab">② 当 API 后端调用</button>
+        <button class="tab-btn" data-t="t3" role="tab">③ 写自定义节点</button>
+        <button class="tab-btn" data-t="t4" role="tab">④ 扩展前端</button>
+      </div>
+
+      <div class="tab-pane on" id="t1">
+        <p><b>用户路径</b>:桌面版一键安装,或克隆源码运行。模型放入 <code>models/</code> 对应子目录,浏览器打开 <code>127.0.0.1:8188</code>,从模板库载入工作流即可出图。装上 <b>ComfyUI Manager</b> 后,缺失节点可一键补齐。</p>
+        <pre class="code"><button class="copy">复制</button><span class="cm"># 源码方式</span>
+git clone https://github.com/comfyanonymous/ComfyUI
+cd ComfyUI && pip install -r requirements.txt
+python main.py          <span class="cm"># 默认 http://127.0.0.1:8188</span>
+
+<span class="cm"># 或使用官方 CLI</span>
+pip install comfy-cli && comfy install</pre>
+      </div>
+
+      <div class="tab-pane" id="t2">
+        <p><b>程序员路径</b>:在界面里调好工作流,菜单导出「API Format」JSON,然后任何语言 POST 给后端。改字段 = 改参数,ComfyUI 就成了你产品里的生成微服务:</p>
+        <pre class="code"><button class="copy">复制</button><span class="kw">import</span> json, urllib.request
+
+wf = json.load(<span class="fn">open</span>(<span class="st">"workflow_api.json"</span>))
+wf[<span class="st">"6"</span>][<span class="st">"inputs"</span>][<span class="st">"text"</span>] = <span class="st">"a cat in a spacesuit"</span>  <span class="cm"># 改提示词</span>
+wf[<span class="st">"3"</span>][<span class="st">"inputs"</span>][<span class="st">"seed"</span>] = <span class="nb">42</span>                       <span class="cm"># 改种子</span>
+
+req = urllib.request.Request(
+    <span class="st">"http://127.0.0.1:8188/prompt"</span>,
+    data=json.dumps({<span class="st">"prompt"</span>: wf}).encode(),
+    headers={<span class="st">"Content-Type"</span>: <span class="st">"application/json"</span>})
+urllib.request.urlopen(req)   <span class="cm"># 之后经 WebSocket / GET /history 取结果</span></pre>
+      </div>
+
+      <div class="tab-pane" id="t3">
+        <p><b>核心二开路径</b>:自定义节点就是一个普通 Python 类,声明输入/输出/入口函数,放进 <code>custom_nodes/</code> 重启即生效——不需要动任何主仓库代码:</p>
+        <pre class="code"><button class="copy">复制</button><span class="cm"># custom_nodes/my_pack/__init__.py</span>
+<span class="kw">class</span> <span class="fn">ImageBrightness</span>:
+    <span class="kw">@classmethod</span>
+    <span class="kw">def</span> <span class="fn">INPUT_TYPES</span>(cls):
+        <span class="kw">return</span> {<span class="st">"required"</span>: {
+            <span class="st">"image"</span>: (<span class="st">"IMAGE"</span>,),                       <span class="cm"># 类型即端口颜色</span>
+            <span class="st">"factor"</span>: (<span class="st">"FLOAT"</span>, {<span class="st">"default"</span>: <span class="nb">1.0</span>,
+                        <span class="st">"min"</span>: <span class="nb">0.0</span>, <span class="st">"max"</span>: <span class="nb">3.0</span>, <span class="st">"step"</span>: <span class="nb">0.05</span>}),
+        }}
+    RETURN_TYPES = (<span class="st">"IMAGE"</span>,)
+    FUNCTION = <span class="st">"run"</span>
+    CATEGORY = <span class="st">"image/adjust"</span>
+
+    <span class="kw">def</span> <span class="fn">run</span>(self, image, factor):   <span class="cm"># image: torch.Tensor [B,H,W,C]</span>
+        <span class="kw">return</span> ((image * factor).clamp(<span class="nb">0</span>, <span class="nb">1</span>),)
+
+NODE_CLASS_MAPPINGS = {<span class="st">"ImageBrightness"</span>: ImageBrightness}
+NODE_DISPLAY_NAME_MAPPINGS = {<span class="st">"ImageBrightness"</span>: <span class="st">"图像亮度"</span>}</pre>
+        <p style="margin-top:10px">要点:<code>INPUT_TYPES</code> 决定端口与参数控件;<code>RETURN_TYPES</code> 决定输出端口;张量约定为 <code>[B,H,W,C]</code>、值域 0–1。写好后可发布到 Comfy Registry 供 Manager 安装。</p>
+      </div>
+
+      <div class="tab-pane" id="t4">
+        <p><b>前端扩展</b>:节点包内放一个 JS 目录,通过 <code>app.registerExtension</code> 注入界面逻辑(右键菜单、自定义控件、画布行为):</p>
+        <pre class="code"><button class="copy">复制</button><span class="cm">// custom_nodes/my_pack/web/ext.js</span>
+<span class="kw">import</span> { app } <span class="kw">from</span> <span class="st">"../../scripts/app.js"</span>;
+
+app.<span class="fn">registerExtension</span>({
+  name: <span class="st">"my_pack.ui"</span>,
+  <span class="kw">async</span> <span class="fn">nodeCreated</span>(node) {
+    <span class="kw">if</span> (node.comfyClass === <span class="st">"ImageBrightness"</span>)
+      node.color = <span class="st">"#2a4d3a"</span>;   <span class="cm">// 给自己的节点上个色</span>
+  }
+});</pre>
+        <p style="margin-top:10px">再往深走:替换整个前端(独立仓库 <code>Comfy-Org/ComfyUI_frontend</code>)、以 <code>comfy</code> 核心包为库嵌入自己的服务、或基于 headless 模式做集群化推理调度。</p>
+      </div>
+
+      <h3>仓库地图:二开前先认路</h3>
+      <div class="tree">
+ComfyUI/
+├── <span class="d">main.py</span>                 <span class="note"># 入口:启动服务与执行循环</span>
+├── <span class="d">server.py</span>               <span class="note"># aiohttp 路由 + WebSocket</span>
+├── <span class="d">execution.py</span>            <span class="note"># DAG 执行器与缓存</span>
+├── <span class="d">nodes.py</span>                <span class="note"># 内置核心节点定义</span>
+├── <span class="d">comfy/</span>                  <span class="note"># ★ 模型运行时:samplers / model_management / ldm ...</span>
+├── <span class="d">comfy_extras/</span>           <span class="note"># 更多官方节点(按功能分文件)</span>
+├── <span class="d">custom_nodes/</span>           <span class="note"># ★ 二开入口:放这里即自动加载</span>
+├── <span class="d">models/</span>                 <span class="note"># checkpoints / loras / vae / controlnet ...</span>
+├── <span class="d">input/</span> · <span class="d">output/</span>        <span class="note"># 输入素材与生成产物</span>
+└── <span class="d">app/</span> · <span class="d">api_server/</span>      <span class="note"># 用户系统、前端托管与新版 API</span></div>
+    </div>
+  </section>
+
+  <section class="node-card">
+    <div class="card-head"><span class="port" style="background:var(--ok)"></span><h2>带走三句话</h2><span class="ntype">TL;DR</span></div>
+    <div class="card-body">
+      <p><b>1.</b> ComfyUI 把扩散模型推理拆成<span class="hl">强类型节点图</span>:节点 = 计算阶段,连线 = 中间数据,图 = 可复现的工作流资产。</p>
+      <p><b>2.</b> 它的引擎按 DAG 拓扑执行、<span class="hl">只重算变化的节点</span>,并用激进的显存调度让大模型跑在小显卡上——这是它又快又省的原因。</p>
+      <p><b>3.</b> 二开有四级台阶:装节点 → 调 API → 写 custom node(一个 Python 类)→ 改前端/嵌核心库,<span class="hl">每一级都不需要动主仓库代码</span>。</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>项目主页:<a href="https://github.com/comfyanonymous/ComfyUI">github.com/comfyanonymous/ComfyUI</a> · 组织:<a href="https://github.com/Comfy-Org">Comfy-Org</a> · 文档:<a href="https://docs.comfy.org">docs.comfy.org</a></div>
+    <div>本页为社区学习性质的解读,细节以官方仓库与文档为准(信息截至 2026 年初)。</div>
+  </div>
+</footer>
+
+<script>
+/* ---------- 首屏执行动画 ---------- */
+(function(){
+  const order = [
+    {n:'n-ckpt',   w:['w-model','w-clip1','w-clip2','w-vae'], log:'got prompt → Load Checkpoint'},
+    {n:'n-pos',    w:['w-pos'],    log:'CLIP Text Encode (positive)'},
+    {n:'n-neg',    w:['w-neg'],    log:'CLIP Text Encode (negative)'},
+    {n:'n-latent', w:['w-latent'], log:'Empty Latent Image 1024×1024'},
+    {n:'n-ksampler',w:['w-samp'],  log:'KSampler: 20 steps ██████████'},
+    {n:'n-vae',    w:['w-img'],    log:'VAE Decode → IMAGE'},
+    {n:'n-save',   w:[],           log:'Prompt executed ✔ (下次只重算变化节点)'}
+  ];
+  const btn = document.getElementById('queueBtn');
+  const log = document.getElementById('execLog');
+  const result = document.getElementById('resultImg');
+  let timers = [];
+  btn.addEventListener('click', () => {
+    timers.forEach(clearTimeout); timers = [];
+    document.querySelectorAll('.node-g').forEach(g => g.classList.remove('running','done'));
+    document.querySelectorAll('.wire').forEach(w => w.classList.remove('flow'));
+    result.setAttribute('opacity','0');
+    btn.disabled = true;
+    const stepDur = 750;
+    order.forEach((s, i) => {
+      timers.push(setTimeout(() => {
+        if (i > 0) {
+          const prev = document.getElementById(order[i-1].n);
+          prev.classList.remove('running'); prev.classList.add('done');
+        }
+        const g = document.getElementById(s.n);
+        g.classList.add('running');
+        log.textContent = '[' + (i+1) + '/7] ' + s.log;
+        s.w.forEach(id => document.querySelector('[data-w="'+id+'"]').classList.add('flow'));
+      }, i * stepDur));
+    });
+    timers.push(setTimeout(() => {
+      const last = document.getElementById('n-save');
+      last.classList.remove('running'); last.classList.add('done');
+      result.setAttribute('opacity','1');
+      document.querySelectorAll('.wire').forEach(w => w.classList.remove('flow'));
+      btn.disabled = false;
+    }, order.length * stepDur + 400));
+  });
+})();
+
+/* ---------- 数据流阶段说明 ---------- */
+(function(){
+  const detail = {
+    clip: '<b>文本编码(CLIP Text Encode)</b>:提示词被分词后送入 CLIP(新模型还会加 T5 等)文本编码器,变成一组语义向量,即 <b style="color:var(--c-cond)">CONDITIONING</b>。它是后续去噪的「导航信号」——模型并不读文字,只读这些向量。正向/负向提示各编码一份。',
+    latent: '<b>初始潜空间(Empty Latent Image)</b>:扩散不在像素上进行,而在 VAE 压缩出的<b style="color:var(--c-latent)">潜空间</b>(约 1/8 边长)中进行,算力需求骤降——这正是「Latent Diffusion」的含义。文生图从纯高斯噪声张量出发;图生图则把现有图片 VAE Encode 后加部分噪声作为起点。',
+    sample: '<b>迭代去噪(KSampler)</b>:每一步,<b style="color:var(--c-model)">MODEL</b>(UNet 或 DiT)在正/负 conditioning 引导下预测当前噪声,采样算法(euler、dpm++ 2m、…)据此更新潜空间;CFG 值控制「听提示词的程度」。循环 N 步后,噪声张量收敛为有内容的潜空间图像。这是整条流水线中最耗时的一段。',
+    decode: '<b>解码成像(VAE Decode)</b>:去噪完成的潜空间张量交给 <b style="color:var(--c-vae)">VAE</b> 解码器,放大还原为像素级 <b style="color:var(--c-image)">IMAGE</b>,随后可接保存、放大、修脸等任意后处理节点。反方向的 VAE Encode 则是图生图/重绘的入口。'
+  };
+  const box = document.getElementById('stageDetail');
+  const stages = document.querySelectorAll('#pipeline .stage');
+  function show(k){ box.innerHTML = detail[k]; }
+  stages.forEach(s => s.addEventListener('click', () => {
+    stages.forEach(x => x.classList.remove('active'));
+    s.classList.add('active'); show(s.dataset.k);
+  }));
+  show('clip');
+})();
+
+/* ---------- 去噪滑块 ---------- */
+(function(){
+  const slider = document.getElementById('stepSlider');
+  const num = document.getElementById('stepNum');
+  const noise = document.getElementById('noiseRect');
+  slider.addEventListener('input', () => {
+    const t = slider.value / 20;
+    num.textContent = slider.value;
+    noise.setAttribute('opacity', String(Math.pow(1 - t, 1.6)));
+  });
+})();
+
+/* ---------- 缓存演示 ---------- */
+(function(){
+  const nodes = [...document.querySelectorAll('#cacheNodes .cnode')];
+  const msg = document.getElementById('cacheMsg');
+  document.querySelectorAll('.cache-row button').forEach(b => {
+    b.addEventListener('click', () => {
+      const from = parseInt(b.dataset.change, 10);
+      nodes.forEach(n => {
+        const i = parseInt(n.dataset.i, 10);
+        n.classList.remove('hit','recalc');
+        // Save Image 总会执行以落盘;其余按依赖判断
+        if (from === -1) { n.classList.add(i === 5 ? 'recalc' : 'hit'); }
+        else { n.classList.add(i >= from ? 'recalc' : 'hit'); }
+      });
+      const re = nodes.filter(n => n.classList.contains('recalc')).length;
+      msg.textContent = ' —— 本次仅重算 ' + re + '/5 个节点,上游全部命中缓存';
+    });
+  });
+})();
+
+/* ---------- 架构层折叠 ---------- */
+document.querySelectorAll('.layer-head').forEach(h => {
+  h.addEventListener('click', () => {
+    const l = h.parentElement;
+    const open = l.classList.toggle('open');
+    h.setAttribute('aria-expanded', open);
+  });
+});
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('.tab-pane').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    document.getElementById(b.dataset.t).classList.add('on');
+  });
+});
+
+/* ---------- 代码复制 ---------- */
+document.querySelectorAll('.copy').forEach(c => {
+  c.addEventListener('click', () => {
+    const pre = c.parentElement.cloneNode(true);
+    pre.querySelector('.copy').remove();
+    navigator.clipboard && navigator.clipboard.writeText(pre.textContent.trim());
+    c.textContent = '已复制'; setTimeout(() => c.textContent = '复制', 1500);
+  });
+});
+</script>
+</body>
+</html>
