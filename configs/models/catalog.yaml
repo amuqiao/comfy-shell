@@ -6,24 +6,11 @@ defaults:
   source: huggingface
 
 bundles:
-  sdxl-basic:
-    title: SDXL 文生图入门
-    tutorial: docs/tutorials/01-text-to-image.md
-    description: 用于第一篇文生图教程的基础 checkpoint。
-    models:
-      - id: sdxl-base-1.0
-        directory: checkpoints
-        filename: sd_xl_base_1.0.safetensors
-        source: huggingface
-        repo: stabilityai/stable-diffusion-xl-base-1.0
-        path: sd_xl_base_1.0.safetensors
-        required: true
-
-  wan22-i2v-basic:
-    title: Wan 2.2 图生视频入门
-    tutorial: docs/tutorials/03-image-to-video.md
+  heroine-i2v-core:
+    title: AI 女主图生视频主线
+    tutorial: docs/tutorials/ai-heroine-content-pipeline.md
     blueprint: ComfyUI/blueprints/Image to Video (Wan 2.2).json
-    description: ComfyUI 自带 Wan 2.2 I2V 蓝图依赖的基础模型文件。
+    description: 用于 AI 女主短视频生产线的 Wan 2.2 I2V 主力模型包。
     models:
       - id: wan22-i2v-high-noise
         directory: diffusion_models
@@ -68,11 +55,11 @@ bundles:
         path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
         required: true
 
-  wan22-t2v-basic:
-    title: Wan 2.2 文生视频入门
-    tutorial: docs/tutorials/04-text-to-video.md
+  heroine-t2v-explore:
+    title: AI 女主文生视频探索
+    tutorial: docs/tutorials/ai-heroine-content-pipeline.md
     blueprint: ComfyUI/blueprints/Text to Video (Wan 2.2).json
-    description: ComfyUI 自带 Wan 2.2 T2V 蓝图依赖的基础模型文件。
+    description: 用于镜头和场景探索的 Wan 2.2 T2V 模型包，不作为主生产路径。
     models:
       - id: wan22-t2v-high-noise
         directory: diffusion_models
@@ -116,4 +103,3 @@ bundles:
         repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
         path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
         required: true
-

@@ -52,10 +52,10 @@ usage() {
 常用示例:
   ./scripts/models.sh list
   ./scripts/models.sh status
-  ./scripts/models.sh status sdxl-basic
-  ./scripts/models.sh plan sdxl-basic
-  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download sdxl-basic
-  ./scripts/models.sh plan wan22-i2v-basic
+  ./scripts/models.sh status heroine-i2v-core
+  ./scripts/models.sh plan heroine-i2v-core
+  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
+  ./scripts/models.sh plan heroine-t2v-explore
 
 Exit Codes:
   0  成功

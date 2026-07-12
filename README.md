@@ -140,3 +140,18 @@ The shell script itself does not download models or install third-party
 `custom_nodes`. Because `start` enables upstream ComfyUI-Manager, Manager may
 run its own startup security checks or complete tasks that were previously
 scheduled from the UI.
+
+## Business Tutorial
+
+The tutorial path is business-first rather than basic ComfyUI lessons. Start here:
+
+```text
+docs/tutorials/README.md
+docs/tutorials/ai-heroine-content-pipeline.md
+docs/tutorials/models.md
+```
+
+The current mainline is an original AI heroine short-video production pipeline:
+identity assets, outfit changes, try-on keyframes, motion references, image-to-video,
+and publishing assets. The old separate text-to-image / image-to-image /
+image-to-video / text-to-video tutorials are no longer maintained.

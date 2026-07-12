@@ -7,27 +7,43 @@
 不要把所有模型都放进一个目录。按模型类型放置：
 
 ```text
-ComfyUI/models/checkpoints/        SDXL、Flux FP8 单文件 checkpoint
+ComfyUI/models/checkpoints/        单文件 checkpoint
 ComfyUI/models/diffusion_models/   Flux full、Wan 视频模型
 ComfyUI/models/text_encoders/      t5xxl、umt5 等文本编码器
 ComfyUI/models/vae/                VAE
-ComfyUI/models/clip_vision/        图生视频/参考图相关视觉编码器
-ComfyUI/models/loras/              LoRA 风格包
+ComfyUI/models/clip_vision/        参考图相关视觉编码器
+ComfyUI/models/loras/              LoRA 风格包或角色包
 ComfyUI/models/controlnet/         ControlNet / Canny / Depth
 ComfyUI/models/upscale_models/     放大模型
 ```
 
 工作流报 missing model 时，先看节点名称和模型类型，再检查目录。
 
-## 入门阶段怎么放
+## 业务阶段怎么放
 
-Mac 本机先用默认目录：
+当前项目不再按“基础教程”组织模型，而是按 AI 女主内容生产线组织。
+
+已落地到 `configs/models/catalog.yaml`、可用 `models.sh` 管理的模型包：
+
+```text
+heroine-i2v-core         图生视频主线
+heroine-t2v-explore      文生视频探索，不作为主生产路径
+```
+
+规划中、暂未标准化到 catalog 的模型包：
+
+```text
+heroine-image-core       女主身份图、封面、首帧
+heroine-image-edit       变装、试穿、局部编辑
+```
+
+Mac 本机可以先用默认目录：
 
 ```text
 ComfyUI/models/
 ```
 
-不要太早抽象外部模型仓库。先跑通文生图、图生图、图生视频，再整理。
+视频模型和图像主力模型都很大。不要为了省下载成本选择过时模型；真正要节省的是重复下载、目录混乱和模型用途不清。
 
 ## 服务器阶段怎么放
 
@@ -41,14 +57,13 @@ ComfyUI/models/
 
 ## 模型命名建议
 
-保留来源和精度信息，避免以后分不清：
+保留来源、用途和精度信息，避免以后分不清：
 
 ```text
-sdxl-base-1.0.safetensors
-flux-schnell-fp8.safetensors
-wan2.1-i2v-480p-fp8.safetensors
-t5xxl-fp16.safetensors
-vae-ft-mse.safetensors
+wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
+wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
+umt5_xxl_fp8_e4m3fn_scaled.safetensors
+heroine-v1-lora.safetensors
 ```
 
 不要使用：
@@ -66,6 +81,7 @@ test1.safetensors
 ```bash
 ls -lh ComfyUI/models/checkpoints
 ls -lh ComfyUI/models/diffusion_models
+ls -lh ComfyUI/models/text_encoders
 ls -lh ComfyUI/models/vae
 ```
 
@@ -78,17 +94,17 @@ ls -lh ComfyUI/models/vae
 
 ## 页面下载模型
 
-新手优先用 ComfyUI 页面管理模型：
+页面下载适合探索和补缺：
 
 1. 打开 ComfyUI。
-2. 导入教程里的 workflow 或蓝图。
+2. 导入业务 workflow 或自带蓝图。
 3. 如果页面提示缺少模型，先看节点提示的模型名和目录。
-4. 通过 ComfyUI-Manager 或工作流里的模型提示下载。
+4. 通过 ComfyUI-Manager 或 workflow 的模型提示下载。
 5. 下载完成后重启 ComfyUI，刷新模型列表。
 
-这种方式适合探索和补缺。缺点是模型来源、文件名、用途和服务器复现路径不够集中，所以常用模型应逐步沉淀到 `configs/models/catalog.yaml`。
+常用模型最后应沉淀到 `configs/models/catalog.yaml`，否则 Mac 和服务器很难复现。
 
-## 可选：用 models.sh 管理标准模型包
+## 可选：用 models.sh 管理生产线模型包
 
 本项目提供可选脚本：
 
@@ -97,28 +113,28 @@ configs/models/catalog.yaml
 scripts/models.sh
 ```
 
-它不替代页面操作，只负责把教程中的基础模型包标准化，方便以后在 Mac 和服务器复现。
+它不替代页面操作，只负责把生产线常用模型包标准化，方便以后在 Mac 和服务器复现。
 
 常用命令：
 
 ```bash
 ./scripts/models.sh list
 ./scripts/models.sh status
-./scripts/models.sh plan sdxl-basic
-./scripts/models.sh status sdxl-basic
+./scripts/models.sh plan heroine-i2v-core
+./scripts/models.sh status heroine-i2v-core
 ```
 
 显式下载模型：
 
 ```bash
-HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download sdxl-basic
+HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
 ```
 
 视频模型较大，先看计划和磁盘空间：
 
 ```bash
-./scripts/models.sh plan wan22-i2v-basic
-./scripts/models.sh plan wan22-t2v-basic
+./scripts/models.sh plan heroine-i2v-core
+./scripts/models.sh plan heroine-t2v-explore
 df -h ComfyUI/models
 ```
 
@@ -126,7 +142,7 @@ df -h ComfyUI/models
 
 ```text
 list/status/plan   只读，不访问网络
-  download           显式下载，写入 ComfyUI/models 下的模型资产目录
+download           显式下载，写入 ComfyUI/models 下的模型资产目录
 ```
 
 它不会被 `dev.sh bootstrap` 自动调用，也不会静默下载大文件。
@@ -150,7 +166,7 @@ list/status/plan   只读，不访问网络
 
 然后让 ComfyUI 通过 `extra_model_paths.yaml` 读取这个外部目录。
 
-入门阶段可以暂时不做这一步，避免把学习重点从作品转移到目录配置。
+本机实践阶段可以暂时不做这一步，避免把重点从作品转移到目录配置。
 
 ## 与本项目脚本的关系
 
@@ -175,7 +191,8 @@ ComfyUI-Manager Python 包
 
 ## 推荐习惯
 
-- 下载一个模型后，立即记录它用于哪个 workflow。
+- 下载一个模型后，立即记录它用于哪个业务 workflow。
 - 每个作品保存 workflow JSON。
+- 女主身份、变装关键帧、视频首帧要放进 `assets/heroine/`，不要只留在 `ComfyUI/output/`。
 - 不常用的大模型先移到归档目录，不要长期堆在默认目录。
 - 服务器上定期检查磁盘空间。
