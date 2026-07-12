@@ -1,39 +1,492 @@
-# AI 女主短视频生产线
+# AI 女主短视频 MVP 生产线
 
-本文目标是搭一条可复用的 AI 女主内容生产线：先建立原创女主身份，再围绕变装、试穿、热门动作参考和图生视频持续出片。
+本文目标是用可用素材和成熟 workflow，先产出一条可发布的 AI 女主竖屏短视频成片，再逐步沉淀原创女主资产、舞蹈动作、变装、试穿和日更生产线。
 
 ## 这篇文档解决什么
 
-它不讲 ComfyUI 基础教程，不按“文生图、图生图、文生视频、图生视频”拆课。那些能力会在业务流程中自然用到。
+本文只解决一个业务问题：
+
+```text
+我怎样用现成 workflow + 自己提供的素材
+尽快产出第一条可发布的 AI 女主短视频成片
+```
 
 本文负责：
 
-- 设计一个稳定可识别的原创 AI 女主。
-- 建立角色资产库，支持换装、变装和试穿。
-- 把热门短视频拆成动作、镜头和节奏参考。
-- 用图片生成、图片编辑、图生视频组合成日更工作流。
-- 约束模型、workflow、素材和输出的沉淀方式。
+- 告诉你先准备哪些素材。
+- 告诉你优先复用哪些现成 workflow。
+- 告诉你第一条可发布视频的最短路径。
+- 告诉你声音、剪辑和发布检查怎么接上。
+- 告诉你哪些事情先不要做。
+- 告诉你跑通后如何沉淀女主资产和生产线。
 
 本文不负责：
 
 - 冒充真实博主或复刻真人身份。
 - 未授权换脸、声音克隆或把真人转成敏感内容。
+- 复用未授权音乐、音频、原片水印或他人个人标识。
 - 规避平台审核或制作违规内容。
+- 从 0 讲解节点原理。
 
-## 核心判断
+## 心智模型
 
-不要做一个巨大 workflow。稳定账号要拆成多个业务 workflow：
+先用素材驱动，不要用节点驱动：
 
 ```text
-女主身份资产
--> 角色一致性
--> 变装/试穿关键帧
--> 热门动作参考
--> 图生视频
--> 剪辑发布
+你提供素材
+  -> 女主参考图
+  -> 热门视频参考
+  -> 服装/商品图
+  -> 发布目标
+
+复用成熟 workflow
+  -> ComfyUI templates
+  -> ComfyUI blueprints
+  -> ComfyUI-Manager 可安装节点包
+  -> 社区热门 workflow
+
+最小改动
+  -> 替换输入图
+  -> 替换 prompt
+  -> 选择模型
+  -> 调少量参数
+
+画面素材
+  -> 首帧/关键帧
+  -> 3-5 秒视频
+  -> 可复用 workflow
+
+后期成片
+  -> 剪映 / CapCut / PR
+  -> BGM / 音效 / 字幕 / 封面
+  -> 8-15 秒 9:16 竖屏成片
+  -> 发布前检查
 ```
 
-长期一致的是：
+第一阶段不要追求完美女主一致性。先让“输入图 -> 视频素材 -> 后期合成 -> 可发布成片”这条链路跑通。
+
+## 内容边界
+
+可以参考真实热门视频的：
+
+```text
+动作节奏
+镜头角度
+构图
+转场
+服装品类
+拍摄脚本
+音乐节奏和卡点方式
+```
+
+不要直接复刻真实博主的：
+
+```text
+脸
+身份
+声音
+水印
+个人标识
+未授权原片内容
+未授权音乐或音频素材
+```
+
+正确做法是：热门视频作为动作和镜头参考，主角必须是原创 AI 女主。
+
+## MVP 素材清单
+
+第一条视频不要等资产库完美。先准备这些可用素材：
+
+| 素材 | 最低要求 | 用途 |
+|---|---|---|
+| 女主参考图 | 1 张清晰正脸或半身图，原创，不是真人复刻 | 作为 AI 女主身份起点 |
+| 首帧图 | 1 张适合做视频开头的图，可以由女主参考图编辑得到 | 输入图生视频 workflow |
+| 热门视频参考 | 1 条你想学习的公开视频 | 拆动作、镜头、节奏，不复制身份 |
+| 服装/商品图 | 可选，清晰单品图 | 变装或试穿关键帧 |
+| BGM / 音效 | 使用目标平台内可用曲库、授权音乐或自有音频 | 后期卡点和成片氛围 |
+| 发布目标 | 8-15 秒 9:16 竖屏成片 | 决定画面片段、剪辑节奏和导出规格 |
+
+如果你现在只有一张女主图，也可以先跑：
+
+```text
+女主参考图
+-> 图生视频 workflow
+-> 轻动作 prompt
+-> 3-5 秒视频
+-> 剪映加 BGM、字幕、封面
+-> 8-15 秒竖屏成片
+```
+
+## 成熟 workflow 优先级
+
+不要从零造轮子，按这个顺序找 workflow：
+
+### 1. ComfyUI 自带 blueprints
+
+优先使用仓库里已经存在的蓝图：
+
+```text
+ComfyUI/blueprints/Image to Video (Wan 2.2).json
+ComfyUI/blueprints/Text to Video (Wan 2.2).json
+ComfyUI/blueprints/Text to Image.json
+```
+
+当前主生产路径优先用：
+
+```text
+Image to Video (Wan 2.2)
+```
+
+它适合“已有女主首帧 -> 生成短视频”。
+
+### 2. ComfyUI templates
+
+页面里打开：
+
+```text
+浏览模板 / Browse Templates
+```
+
+适合找：
+
+```text
+image to video
+text to image
+image edit
+try-on
+inpaint
+outpaint
+```
+
+模板比从零搭节点更适合第一阶段。
+
+### 3. ComfyUI-Manager 和社区热门 workflow
+
+导入别人分享的 JSON 或带 workflow metadata 的 PNG 时，先看三件事：
+
+```text
+是否缺 custom node
+是否缺模型
+是否需要很复杂的环境依赖
+```
+
+第一阶段选择“缺少东西少、模型来源清楚、节点包可信”的 workflow。不要一上来装一堆来源不明的节点。
+
+## 第一条可发布视频最短路径
+
+目标：先产出一条 8-15 秒、9:16、带声音、可发布的舞蹈类竖屏成片。
+
+### 首次运行前置检查
+
+如果这是第一次在本机运行 comfy-shell，先准备环境：
+
+```bash
+./scripts/env.sh use macos-mps
+./scripts/check_env.sh --no-network
+./scripts/dev.sh bootstrap
+```
+
+如果已经 bootstrap 过，直接从步骤 1 开始。
+
+先准备本次实验目录：
+
+```bash
+mkdir -p assets/heroine/inputs assets/heroine/keyframes assets/heroine/exports/videos assets/heroine/exports/covers assets/heroine/metadata workflows
+```
+
+### 步骤 1：启动 ComfyUI
+
+```bash
+./scripts/dev.sh start
+./scripts/dev.sh status
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8188
+```
+
+### 步骤 2：导入图生视频 workflow
+
+页面点击 `打开工作流`，选择：
+
+```text
+ComfyUI/blueprints/Image to Video (Wan 2.2).json
+```
+
+也可以把这个 JSON 直接拖到画布里。
+
+### 步骤 3：准备模型
+
+先看下载计划：
+
+```bash
+./scripts/models.sh plan heroine-i2v-core
+```
+
+确认磁盘空间：
+
+```bash
+df -h ComfyUI/models
+```
+
+显式下载：
+
+```bash
+HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
+```
+
+如果你不想用脚本，也可以按页面缺模型提示下载。两种方式都可以；脚本适合以后 Mac 和服务器复现。
+
+### 步骤 4：替换输入图
+
+在 workflow 里找到 `Load Image` 或图片输入节点，选择你的女主首帧图。
+
+首帧优先满足：
+
+```text
+单人主体
+脸清楚
+手部不畸形
+背景不要太乱
+适合竖屏裁切
+```
+
+### 步骤 5：写轻舞蹈 prompt
+
+第一条视频不要复杂舞蹈。先做轻动作，让身体自然：
+
+```text
+full body dance, gentle rhythm, the woman sways and steps lightly, smooth motion, stable face, fashion video, studio lighting
+```
+
+如果是全身走秀：
+
+```text
+full body fashion walk, gentle hair movement, confident pose, smooth camera pan
+```
+
+### 步骤 6：先用保守参数
+
+第一轮只验证链路：
+
+```text
+时长：3-5 秒
+动作：小幅舞蹈或轻走动
+主体：单人
+镜头：轻推近或轻横移
+分辨率：按 workflow 默认或中等设置
+```
+
+不要同时大改帧数、分辨率、steps、motion、prompt 和输入图。
+
+### 步骤 7：Queue 并保存画面素材
+
+点击 `Queue`。成功后保存：
+
+```text
+ComfyUI/output/                         输出视频
+assets/heroine/keyframes/               输入首帧
+workflows/heroine-i2v-first-video.json  当前 workflow
+```
+
+如果只生成了 3-5 秒，可以重复步骤 4-7 产出 2-3 个相近片段。第一条成片不需要复杂剧情，能剪成自然舞蹈片段即可。
+
+### 步骤 8：导入剪映做后期
+
+ComfyUI 负责画面素材，剪映负责成片：
+
+```text
+导入 ComfyUI 输出视频
+裁切或新建 9:16 竖屏项目
+按音乐节奏排列 1-3 个片段
+删掉明显畸形、闪烁、变脸的片段
+加 BGM、必要音效、字幕和封面
+选择最稳定的一帧作为封面，或从成片中截图保存封面
+导出 8-15 秒成片
+保存到 assets/heroine/exports/videos/
+```
+
+第一条视频优先用目标平台内可用曲库、授权音乐或自有音频。平台曲库通常只适合在对应平台内发布；如果要跨平台分发或二次剪辑，按音乐授权范围重新确认。不要克隆真人声音，不要直接搬运热门视频原声。
+
+建议命名：
+
+```text
+assets/heroine/exports/videos/heroine-dance-mvp-001.mp4
+assets/heroine/exports/covers/heroine-dance-mvp-001-cover.png
+assets/heroine/metadata/heroine-dance-mvp-001.md
+```
+
+### 步骤 9：声音和节奏
+
+舞蹈类视频的声音策略先保持简单：
+
+```text
+主声音：BGM
+辅助：轻音效或节奏点
+字幕：可选，少量账号人设或商品卖点
+配音：第一阶段不做
+口型同步：第一阶段不做
+```
+
+判断声音是否过关：
+
+```text
+音乐节奏和动作节奏基本对齐
+没有明显音画脱节
+没有突兀噪声、爆音或断点
+不用未授权真人声音
+不用带水印或来源不清的原声
+```
+
+把 BGM 来源写进 metadata 文件：
+
+```markdown
+# heroine-dance-mvp-001
+
+- workflow: workflows/heroine-i2v-first-video.json
+- model_bundle: heroine-i2v-core
+- prompt: full body dance, gentle rhythm...
+- input_keyframe: assets/heroine/keyframes/<本次首帧>.png
+- output_clip: ComfyUI/output/<本次视频片段>.mp4
+- final_video: assets/heroine/exports/videos/heroine-dance-mvp-001.mp4
+- cover: assets/heroine/exports/covers/heroine-dance-mvp-001-cover.png
+- bgm_title: <具体曲名或音频文件名>
+- bgm_source: <目标平台曲库 / 授权音乐站点 / 自有音频>
+- bgm_platform_or_library: <抖音曲库 / CapCut 曲库 / 授权站点名 / 本地文件>
+- bgm_link_or_license_id: <曲库链接 / 授权凭据编号 / 本地文件路径>
+- bgm_usage_scope: <仅目标平台 / 可跨平台 / 自用测试>
+- failed_clip_notes: <失败片段原因>
+```
+
+### 步骤 10：发布前检查
+
+导出前逐项看：
+
+```text
+画面：9:16 竖屏，主体完整，脸和身材稳定
+动作：舞蹈自然，没有严重肢体扭曲、手脚穿帮、突然变脸
+声音：BGM 清楚，卡点自然，没有未授权声音复制
+剪辑：节奏顺，开头 1 秒能留住人，结尾不突兀
+字幕：不遮脸、不遮商品、不堆字
+封面：主体清楚，能看出女主人设或舞蹈主题
+合规：不冒充真人，不保留他人水印、昵称、个人标识
+```
+
+这才是第一条业务闭环。
+
+完成后至少留下这些文件：
+
+```text
+assets/heroine/keyframes/<本次首帧>.png
+ComfyUI/output/<本次视频片段>.mp4
+assets/heroine/exports/videos/heroine-dance-mvp-001.mp4
+assets/heroine/exports/covers/heroine-dance-mvp-001-cover.png
+assets/heroine/metadata/heroine-dance-mvp-001.md
+workflows/heroine-i2v-first-video.json
+```
+
+metadata 里至少记录：
+
+```text
+prompt
+使用的 workflow
+使用的模型包
+BGM 来源
+BGM 曲名或音频文件名
+BGM 平台、曲库、链接或授权凭据
+BGM 授权或使用范围
+失败片段原因
+```
+
+## 热门视频怎么用
+
+热门视频不是拿来换脸，而是拆成脚本：
+
+```text
+0.0s-1.0s  全身站姿，轻微摆动
+1.0s-2.0s  向镜头走近，右手整理头发
+2.0s-3.0s  转身展示裙摆
+3.0s-4.0s  回头定格，适合放商品卖点字幕
+4.0s-8.0s  重复最稳动作，给 BGM 卡点
+```
+
+再翻译成 prompt：
+
+```text
+full body fashion pose, the woman slowly turns around, gentle hair movement, smooth camera pan, confident expression
+```
+
+如果 workflow 支持姿态、深度、边缘或视频参考控制，再把热门视频抽成控制素材；如果不支持，第一阶段只用文字拆解，不要为了动作控制卡住。声音只参考节奏，不复制原声。
+
+## 变装和试穿怎么接入
+
+变装/试穿不是第一条视频的阻塞项。跑通图生视频后再接入。
+
+最短路径：
+
+```text
+女主参考图
+-> 图片编辑/换装 workflow
+-> 变装后关键帧
+-> 图生视频 workflow
+-> 短视频
+```
+
+输入素材：
+
+```text
+女主标准图
+服装/商品图
+目标场景 prompt
+```
+
+输出素材：
+
+```text
+试穿正面图
+试穿侧面图
+商品细节图
+视频首帧
+封面图
+可剪辑视频片段
+```
+
+验收标准：
+
+- 观众能认出是同一个 AI 女主。
+- 衣服形态和商品图接近。
+- 画面可以作为视频首帧。
+- 不因为追求换装导致脸和身材严重漂移。
+- 后期加 BGM 后能剪成自然竖屏成片。
+
+## 女主资产库什么时候做
+
+第一条视频跑通后，再做资产库。
+
+目录结构：
+
+```text
+assets/heroine/
+  identity/
+    face-front.png
+    half-body.png
+    full-body-front.png
+    full-body-side.png
+    full-body-back.png
+  expressions/
+  outfits/
+  keyframes/
+  references/
+    motion/
+    music/
+  exports/
+    videos/
+    covers/
+```
+
+需要长期一致的是：
 
 ```text
 脸
@@ -53,307 +506,101 @@
 场景
 动作
 镜头语言
+音乐和卡点
 情绪
 风格尺度
 ```
 
 所以目标不是固定穿搭，而是固定“观众能认出来这是同一个 AI 女主”。
 
-## 内容边界
+## 什么时候训练 LoRA
 
-可以参考真实热门视频的：
+不要一开始训练 LoRA。
 
-```text
-动作节奏
-镜头角度
-构图
-转场
-服装品类
-拍摄脚本
-```
-
-不要直接复刻真实博主的：
+先用参考图方式跑通：
 
 ```text
-脸
-身份
-声音
-水印
-个人标识
-未授权原片内容
-```
-
-正确做法是：热门视频作为动作和镜头参考，主角必须是原创 AI 女主。
-
-## 资产目录
-
-先建立一个稳定目录，不要把所有图片扔进 `output/`：
-
-```text
-assets/heroine/
-  identity/
-    face-front.png
-    half-body.png
-    full-body-front.png
-    full-body-side.png
-    full-body-back.png
-  expressions/
-    smile.png
-    cool.png
-    sweet.png
-  outfits/
-    base/
-    dress/
-    streetwear/
-    product-try-on/
-  keyframes/
-    dance/
-    fashion/
-    product/
-  references/
-    motion/
-    camera/
-  exports/
-    covers/
-    videos/
-workflows/
-  heroine-identity.json
-  heroine-image-edit.json
-  heroine-i2v-dance.json
-  heroine-fashion-tryon.json
-```
-
-第一阶段必须先产出 `identity/`，否则后续每天都会像换了一个人。
-
-## 阶段 1：建立原创女主身份
-
-目标是生成一组角色标准图，不是直接做视频。
-
-建议产物：
-
-```text
-正脸头像
-半身标准照
-全身正面
-全身侧面
-全身背面
+20-50 张女主稳定素材
+3-5 套服装
 3-5 个表情
-2-3 套基础服装
-```
-
-提示词要稳定描述身份，而不是只描述衣服：
-
-```text
-an original young adult female virtual influencer, recognizable face, elegant confident temperament, consistent body proportion, clean studio lighting, high quality portrait
-```
-
-衣服单独描述，避免把穿搭写进身份核心：
-
-```text
-outfit: white fitted top and simple skirt
-outfit: black evening dress
-outfit: casual streetwear jacket
-```
-
-验收标准：
-
-- 换衣服后仍像同一个人。
-- 正脸、半身、全身之间脸和身材比例一致。
-- 没有明显坏手、坏脸、畸形肢体。
-- 能选出 3-5 张作为长期参考图。
-
-## 阶段 2：角色一致性工作流
-
-短期用参考图控制一致性：
-
-```text
-女主标准图
--> 参考图/identity 节点
--> prompt 描述新场景和穿搭
--> 输出新关键帧
-```
-
-长期建议训练或沉淀女主专属 LoRA：
-
-```text
-identity 标准图
 多角度图
-不同表情
-不同服装
-统一命名和标注
+几条成功视频
 ```
 
-不建议一开始训练 LoRA。先用参考图方式跑通 20-50 张稳定素材，再筛选高质量图做训练集。
+当你已经知道哪张脸、哪种身材、哪种气质适合账号，再把高质量图片整理成训练集。
 
-## 阶段 3：变装和试穿关键帧
+## 每日最小 SOP
 
-变装视频不要直接从文字生成整段视频。先做关键帧：
+每天只做这个闭环：
 
 ```text
-变装前关键帧
-变装后关键帧
-商品试穿图
-封面图
+1. 选一个热门视频，拆动作、镜头和音乐卡点。
+2. 选一个女主参考图或关键帧。
+3. 选一段可用 BGM，优先目标平台内可用曲库、授权音乐或自有音频。
+4. 可选：选一件衣服或商品。
+5. 生成或编辑 1-3 张首帧。
+6. 选最稳的首帧跑图生视频。
+7. 输出 1-3 个 3-5 秒视频片段。
+8. 剪映合成 8-15 秒 9:16 成片。
+9. 做发布前检查。
+10. 保存输入图、输出视频、成片、封面、workflow、prompt、模型、BGM 曲名、BGM 来源和 BGM 使用范围。
 ```
 
-女装带货素材至少需要：
+## 复现评审清单
+
+如果你照着本文做完，应该能回答这些问题：
 
 ```text
-商品图
-女主标准图
-试穿正面图
-试穿侧面图
-细节展示图
-短视频首帧
+我用了哪张原创女主首帧？
+我导入了哪个现成 workflow？
+我下载或确认了哪个模型包？
+我生成了几个 3-5 秒画面片段？
+我选了哪段可用 BGM？
+我用剪映导出了哪个 8-15 秒 9:16 成片？
+我导出了哪张封面？
+我把成片、封面、workflow、prompt、模型、BGM 曲名、BGM 来源、BGM 链接或授权凭据、BGM 使用范围保存在哪里？
 ```
 
-验收标准：
+如果其中任意一个问题答不上来，说明生产线还没有真正跑通。
 
-- 商品主体清楚。
-- 女主身份没有漂移。
-- 衣服形态和商品图一致，不要严重幻觉。
-- 画面可以直接作为短视频首帧或封面。
+## 当前可执行模型包
 
-## 阶段 4：热门视频参考拆解
-
-不要把热门视频当“换脸目标”，而是拆解成参考数据：
-
-```text
-动作：转身、抬手、走近镜头、摆裙、回头
-镜头：半身、全身、低机位、推近、横移
-节奏：几秒一个动作点，哪里变装，哪里卡点
-场景：街拍、试衣间、室内棚拍、舞台
-```
-
-建议记录成文字脚本：
-
-```text
-0.0s-1.0s  全身站姿，轻微摆动
-1.0s-2.0s  向镜头走近，右手整理头发
-2.0s-3.0s  转身展示裙摆
-3.0s-4.0s  回头定格，适合放商品卖点字幕
-```
-
-这样你是在复用“动作语言”，不是复制真人。
-
-## 阶段 5：图生视频主工作流
-
-主力视频路径应该是图生视频：
-
-```text
-女主关键帧
--> 图生视频 workflow
--> 轻动作 prompt
--> 短视频输出
--> 剪辑、配乐、字幕
-```
-
-首帧质量决定视频上限。不要拿不稳定的图直接做视频。
-
-建议先做短片段：
-
-```text
-3-5 秒
-单主体
-轻动作
-低到中等分辨率
-一次只改一个变量
-```
-
-常见动作 prompt：
-
-```text
-subtle camera push in, the woman turns slightly, smooth motion, fashion video, soft studio lighting
-```
-
-```text
-full body fashion walk, gentle hair movement, confident pose, smooth camera pan
-```
-
-## 阶段 6：剪辑发布
-
-ComfyUI 负责生成素材，不负责完整运营。发布前还需要剪辑：
-
-```text
-裁切竖屏 9:16
-节奏卡点
-字幕和卖点
-封面
-音乐
-平台标题
-```
-
-每日最小 SOP：
-
-```text
-1. 选一个热门视频，拆动作和镜头。
-2. 选一套女主穿搭或商品。
-3. 生成 2-4 张关键帧。
-4. 选 1 张最稳的做图生视频。
-5. 输出 3-5 秒片段。
-6. 剪辑成 8-15 秒竖屏视频。
-7. 保存 workflow、prompt、模型和成片。
-```
-
-## 模型策略
-
-不要为了“入门轻量”下载过时模型。模型几个 GB 是正常成本，应该下载能长期服务业务的主线模型。
-
-当前已落地到 `configs/models/catalog.yaml` 的模型包：
+已落地到 `configs/models/catalog.yaml` 的模型包：
 
 ```text
 heroine-i2v-core         图生视频主线
 heroine-t2v-explore      文生视频探索，不作为主生产路径
 ```
 
-后续规划沉淀，但当前还没有标准化 catalog 条目的模型包：
-
-```text
-heroine-image-core       女主身份图、封面、首帧
-heroine-image-edit       变装、试穿、局部编辑
-```
-
-查看模型计划：
+查看：
 
 ```bash
 ./scripts/models.sh list
 ./scripts/models.sh plan heroine-i2v-core
 ```
 
-显式下载时再执行：
-
-```bash
-HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
-```
-
-`models.sh` 是可选工程化入口。页面里按 workflow 提示下载也可以，但常用模型最后应该沉淀进 `configs/models/catalog.yaml`。
-
-## 工作流清单
-
-建议逐步沉淀这些 workflow：
+规划中，暂未标准化到 catalog：
 
 ```text
-workflows/heroine-identity.json
-workflows/heroine-image-edit.json
-workflows/heroine-fashion-tryon.json
-workflows/heroine-i2v-dance.json
-workflows/heroine-i2v-product.json
+heroine-image-core       女主身份图、封面、首帧
+heroine-image-edit       变装、局部编辑
+heroine-fashion-tryon    商品试穿
 ```
 
-不要把所有节点塞进一个 workflow。每个 workflow 只解决一个稳定产出目标。
+这些阶段先通过页面模板、ComfyUI-Manager 或社区 workflow 探索。稳定后再加入 `configs/models/catalog.yaml`。
 
-## 第一周目标
+## 不要现在做什么
 
-第一周不要追求日更，先追求资产稳定：
+第一阶段先避免：
 
 ```text
-第 1 天：生成 20 张女主候选，选 1 个身份方向
-第 2 天：生成三视图、半身、全身、表情
-第 3 天：测试 3 套穿搭，确认变装后身份稳定
-第 4 天：选一个热门动作参考，生成首帧
-第 5 天：跑通 3-5 秒图生视频
-第 6 天：剪辑成第一条竖屏视频
-第 7 天：整理 workflow、prompt、模型和失败样例
+从零搭节点
+训练 LoRA
+做复杂多镜头
+做多人视频
+同时换模型、换 prompt、换分辨率、换动作控制
+为了省下载成本使用过时轻量模型
+一开始做声音克隆、复杂配音或口型同步
 ```
 
-完成第一周后，再考虑 LoRA、批量化、试穿链路和服务器加速。
+先跑通业务，再优化质量。
