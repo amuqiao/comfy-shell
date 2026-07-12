@@ -76,6 +76,61 @@ ls -lh ComfyUI/models/vae
 ./scripts/dev.sh status
 ```
 
+## 页面下载模型
+
+新手优先用 ComfyUI 页面管理模型：
+
+1. 打开 ComfyUI。
+2. 导入教程里的 workflow 或蓝图。
+3. 如果页面提示缺少模型，先看节点提示的模型名和目录。
+4. 通过 ComfyUI-Manager 或工作流里的模型提示下载。
+5. 下载完成后重启 ComfyUI，刷新模型列表。
+
+这种方式适合探索和补缺。缺点是模型来源、文件名、用途和服务器复现路径不够集中，所以常用模型应逐步沉淀到 `configs/models/catalog.yaml`。
+
+## 可选：用 models.sh 管理标准模型包
+
+本项目提供可选脚本：
+
+```text
+configs/models/catalog.yaml
+scripts/models.sh
+```
+
+它不替代页面操作，只负责把教程中的基础模型包标准化，方便以后在 Mac 和服务器复现。
+
+常用命令：
+
+```bash
+./scripts/models.sh list
+./scripts/models.sh status
+./scripts/models.sh plan sdxl-basic
+./scripts/models.sh status sdxl-basic
+```
+
+显式下载模型：
+
+```bash
+HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download sdxl-basic
+```
+
+视频模型较大，先看计划和磁盘空间：
+
+```bash
+./scripts/models.sh plan wan22-i2v-basic
+./scripts/models.sh plan wan22-t2v-basic
+df -h ComfyUI/models
+```
+
+`models.sh` 的边界：
+
+```text
+list/status/plan   只读，不访问网络
+  download           显式下载，写入 ComfyUI/models 下的模型资产目录
+```
+
+它不会被 `dev.sh bootstrap` 自动调用，也不会静默下载大文件。
+
 ## 什么时候使用 extra_model_paths.yaml
 
 当模型变多，或你希望 Mac 和服务器共用同一套模型仓库时，再使用 `extra_model_paths.yaml`。
@@ -116,7 +171,7 @@ ComfyUI-Manager Python 包
 自动迁移模型目录
 ```
 
-模型下载和放置由你显式执行。这样可以避免脚本静默下载大文件，也更容易控制磁盘空间。
+模型下载和放置由你显式执行。`models.sh download` 是可选的显式下载入口，不会被启动或安装脚本自动触发；它只写模型资产目录，不修改 ComfyUI 已跟踪源码文件。
 
 ## 推荐习惯
 
@@ -124,4 +179,3 @@ ComfyUI-Manager Python 包
 - 每个作品保存 workflow JSON。
 - 不常用的大模型先移到归档目录，不要长期堆在默认目录。
 - 服务器上定期检查磁盘空间。
-

@@ -45,6 +45,15 @@ ComfyUI/blueprints/Text to Video (Wan 2.2).json
 
 这个蓝图会提示需要的模型文件。入门时优先按蓝图里的模型清单放置，不要自己猜目录。
 
+可选脚本入口：
+
+```bash
+./scripts/models.sh plan wan22-t2v-basic
+./scripts/models.sh status wan22-t2v-basic
+```
+
+Wan 视频模型很大，下载前先确认磁盘空间。教程不要求必须通过脚本下载。
+
 ## 跟做步骤
 
 1. 打开 ComfyUI。

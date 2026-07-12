@@ -28,6 +28,16 @@ workflows/001-text-to-image.json
 
 模型文件放好后，重启 ComfyUI 或在界面刷新模型列表。
 
+如果想用可选脚本检查或下载教程标准模型包：
+
+```bash
+./scripts/models.sh plan sdxl-basic
+./scripts/models.sh status sdxl-basic
+HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download sdxl-basic
+```
+
+这不是必做步骤。你也可以在页面里通过 ComfyUI-Manager 或工作流提示下载模型。
+
 ## 跟做步骤
 
 1. 打开 ComfyUI：

@@ -39,6 +39,15 @@ ComfyUI/blueprints/Image to Video (Wan 2.2).json
 
 这个蓝图会提示需要的模型文件。入门时优先按蓝图里的模型清单放置，不要自己猜目录。
 
+可选脚本入口：
+
+```bash
+./scripts/models.sh plan wan22-i2v-basic
+./scripts/models.sh status wan22-i2v-basic
+```
+
+Wan 视频模型很大，下载前先确认磁盘空间。教程不要求必须通过脚本下载。
+
 ## 首帧图片
 
 首帧质量决定视频上限。建议先用前两篇教程生成一张：
@@ -64,7 +73,6 @@ ComfyUI/blueprints/Image to Video (Wan 2.2).json
 
    ```text
    diffusion model
-   clip vision
    vae
    text encoder 或 prompt 节点
    ```
@@ -121,7 +129,7 @@ frames        决定时长
 
 找不到模型：
 
-检查模型是否放在工作流要求的目录，尤其是 `diffusion_models/`、`clip_vision/`、`vae/`。
+检查模型是否放在工作流要求的目录，尤其是 `diffusion_models/`、`text_encoders/`、`vae/`、`loras/`。
 
 ## 进阶玩法
 
