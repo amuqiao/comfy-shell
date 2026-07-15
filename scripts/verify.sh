@@ -111,7 +111,6 @@ section "Read-only Smoke"
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --no-network >/dev/null
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile configs/profiles/macos-mps.env.example --no-network >/dev/null
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
-"${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core >/dev/null
 "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example >/dev/null
 "${ROOT_DIR}/scripts/remote.sh" tunnel --host wangqiao@47.94.108.140 --local-port 18188 --remote-port 8188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
@@ -120,6 +119,36 @@ expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --host wangqiao@47.94.108
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile configs/profiles/macos-mps.env.example
 if printf '' | python3 "${ROOT_DIR}/scripts/lib/remote_gpu_format.py" --host smoke --json >/dev/null 2>&1; then
   die "remote_gpu_format.py accepted an empty snapshot" 1
+fi
+
+section "Config Contract Smoke"
+contract_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/comfy-shell-verify.XXXXXX")"
+trap 'rm -rf "$contract_tmp_dir"' EXIT
+contract_profile="$contract_tmp_dir/profile.env"
+cat >"$contract_profile" <<'EOF'
+COMFY_PROFILE=verify-contract
+COMFY_ENV_BACKEND=uv
+COMFY_PYTHON=3.12
+COMFY_DEVICE=cpu
+COMFY_HOST=127.0.0.1
+COMFY_PORT=18188
+COMFY_MODEL_ROOT=/tmp/comfy-shell-profile-models
+COMFY_OUTPUT_ROOT=/tmp/comfy-shell-profile-output
+EOF
+
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/local.sh" status >/dev/null
+  "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core >/dev/null
+else
+  event "SKIP" "default-.env" ".env not found"
+fi
+
+"${ROOT_DIR}/scripts/local.sh" status --profile "$contract_profile" >/dev/null
+if ! "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_profile" | grep -q '/tmp/comfy-shell-profile-models'; then
+  die "models.sh did not read COMFY_MODEL_ROOT from explicit --profile file" 1
+fi
+if ! COMFY_MODEL_ROOT=/tmp/comfy-shell-env-models "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_profile" | grep -q '/tmp/comfy-shell-env-models'; then
+  die "exported COMFY_MODEL_ROOT did not override explicit --profile file" 1
 fi
 
 section "Diff Check"
