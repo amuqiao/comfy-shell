@@ -5,7 +5,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CATALOG_FILE="${CATALOG_FILE:-$ROOT_DIR/configs/models/catalog.yaml}"
-ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/.venv/bin/python}"
 UV_BIN="${UV_BIN:-uv}"
 HF_CLI="${HF_CLI:-hf}"
@@ -13,7 +12,10 @@ HF_CLI="${HF_CLI:-hf}"
 usage() {
   cat <<'EOF'
 用法:
-  ./scripts/models.sh <command> [bundle]
+  ./scripts/models.sh list
+  ./scripts/models.sh status [bundle] [--profile FILE]
+  ./scripts/models.sh plan <bundle> [--profile FILE]
+  ./scripts/models.sh download <bundle> [--profile FILE]
   ./scripts/models.sh -h|--help
 
 作用域:
@@ -37,7 +39,8 @@ usage() {
   help                显示本帮助
 
 配置与环境变量:
-  COMFY_MODEL_ROOT    通过 .env 设置模型根目录; 默认 ./ComfyUI/models
+  --profile FILE      status/plan/download 可显式指定 profile env 文件。
+  COMFY_MODEL_ROOT    从显式 profile 读取; 未传 --profile 时固定默认 ./ComfyUI/models。
   HF_ENDPOINT         可选, 例如 https://hf-mirror.com
   CATALOG_FILE        可选, 覆盖 catalog 路径
   PYTHON_BIN          可选, 覆盖 Python 路径
@@ -52,16 +55,95 @@ usage() {
 常用示例:
   ./scripts/models.sh list
   ./scripts/models.sh status
-  ./scripts/models.sh status heroine-i2v-core
-  ./scripts/models.sh plan heroine-i2v-core
-  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
+  ./scripts/models.sh status heroine-i2v-core --profile .env
+  ./scripts/models.sh plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example
+  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core --profile .env
   ./scripts/models.sh plan heroine-t2v-explore
 
 Exit Codes:
   0  成功
+  1  status 检查发现模型文件缺失或为空
   2  缺少 command、非法参数、catalog 缺失、Python/PyYAML/hf 缺失
-  4  模型文件缺失、为空或下载失败
+  4  下载运行失败
 EOF
+}
+
+command_usage() {
+  local name="$1"
+  case "$name" in
+    list)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh list
+  ./scripts/models.sh list -h|--help
+
+作用域:
+  列出 catalog 中的 bundle。list 不需要 profile, 也不读取 .env。
+EOF
+      ;;
+    status)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh status [bundle] [--profile FILE]
+  ./scripts/models.sh status -h|--help
+
+作用域:
+  检查 bundle 模型文件是否存在且非空。
+
+配置:
+  --profile FILE      可选; 只从显式 profile 读取 COMFY_MODEL_ROOT。
+  默认模型根目录     未传 --profile 时使用 ./ComfyUI/models, 不隐式读取 .env。
+
+常用示例:
+  ./scripts/models.sh status
+  ./scripts/models.sh status heroine-i2v-core --profile .env
+  ./scripts/models.sh status --profile configs/profiles/macos-mps.env.example
+EOF
+      ;;
+    plan)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh plan <bundle> [--profile FILE]
+  ./scripts/models.sh plan -h|--help
+
+作用域:
+  输出下载目标路径和 hf download 命令, 不访问网络。
+
+配置:
+  --profile FILE      可选; 只从显式 profile 读取 COMFY_MODEL_ROOT。
+  默认模型根目录     未传 --profile 时使用 ./ComfyUI/models, 不隐式读取 .env。
+
+常用示例:
+  ./scripts/models.sh plan heroine-i2v-core
+  ./scripts/models.sh plan heroine-i2v-core --profile .env
+  ./scripts/models.sh plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example
+EOF
+      ;;
+    download)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh download <bundle> [--profile FILE]
+  ./scripts/models.sh download -h|--help
+
+作用域:
+  显式下载 bundle 中的模型文件。
+
+配置:
+  --profile FILE      可选; 只从显式 profile 读取 COMFY_MODEL_ROOT。
+  默认模型根目录     未传 --profile 时使用 ./ComfyUI/models, 不隐式读取 .env。
+  HF_ENDPOINT         可选环境变量, 例如 https://hf-mirror.com。
+
+常用示例:
+  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
+  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core --profile .env
+  ./scripts/models.sh download heroine-i2v-core --profile configs/profiles/macos-mps.env.example
+EOF
+      ;;
+    *)
+      usage >&2
+      return 2
+      ;;
+  esac
 }
 
 die() {
@@ -101,9 +183,53 @@ env_value_from() {
   ' "$file"
 }
 
+resolve_path() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$ROOT_DIR" "$1" ;;
+  esac
+}
+
+MODEL_ARGS=()
+PROFILE_FILE=""
+
+parse_optional_profile_args() {
+  local command_name="$1"
+  shift
+  MODEL_ARGS=()
+  PROFILE_FILE=""
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --profile)
+        [[ "$#" -ge 2 ]] || die "--profile requires a file" 2
+        PROFILE_FILE="$2"
+        shift 2
+        ;;
+      --profile=*)
+        PROFILE_FILE="${1#--profile=}"
+        shift
+        ;;
+      -*)
+        die "$command_name unknown option: $1" 2
+        ;;
+      *)
+        MODEL_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
+  if [[ -n "$PROFILE_FILE" ]]; then
+    PROFILE_FILE="$(resolve_path "$PROFILE_FILE")"
+    [[ -f "$PROFILE_FILE" ]] || die "profile not found: $PROFILE_FILE" 2
+  fi
+}
+
 model_root() {
-  local configured
-  configured="$(env_value_from COMFY_MODEL_ROOT "$ENV_FILE")"
+  local configured="./ComfyUI/models"
+  if [[ -n "${PROFILE_FILE:-}" ]]; then
+    configured="$(env_value_from COMFY_MODEL_ROOT "$PROFILE_FILE")"
+    configured="${configured:-./ComfyUI/models}"
+  fi
   configured="${configured:-./ComfyUI/models}"
   case "$configured" in
     /*) printf '%s' "$configured" ;;
@@ -117,8 +243,8 @@ require_catalog() {
 
 require_python_yaml() {
   [[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="$(command -v python3 2>/dev/null || true)"
-  [[ -n "$PYTHON_BIN" ]] || die "python not found; run ./scripts/local.sh bootstrap first" 2
-  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1 || die "PyYAML not available in $PYTHON_BIN; run ./scripts/local.sh bootstrap first" 2
+  [[ -n "$PYTHON_BIN" ]] || die "python not found; run ./scripts/local.sh bootstrap --profile FILE first" 2
+  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1 || die "PyYAML not available in $PYTHON_BIN; run ./scripts/local.sh bootstrap --profile FILE first" 2
 import yaml
 PY
 }
@@ -169,7 +295,7 @@ elif mode == "status":
             else:
                 missing += 1
                 print(f"MISSING\t{model['id']}\t{path}")
-    raise SystemExit(4 if missing else 0)
+    raise SystemExit(1 if missing else 0)
 elif mode == "plan":
     for name, bundle in bundle_items():
         print(f"## {name} - {bundle.get('title', '')}")
@@ -190,13 +316,15 @@ else:
 PY
 }
 
-hf_command() {
+HF_CMD=()
+
+resolve_hf_command() {
   if command -v "$HF_CLI" >/dev/null 2>&1; then
-    printf '%s' "$HF_CLI"
+    HF_CMD=("$HF_CLI")
     return
   fi
   command -v "$UV_BIN" >/dev/null 2>&1 || die "hf CLI not found and uv not available" 2
-  printf '%s run hf' "$UV_BIN"
+  HF_CMD=("$UV_BIN" run hf)
 }
 
 download_bundle() {
@@ -204,8 +332,7 @@ download_bundle() {
   require_catalog
   require_python_yaml
   [[ -n "$bundle" ]] || die "download requires bundle" 2
-  local hf
-  hf="$(hf_command)"
+  resolve_hf_command
   section "Download Plan"
   catalog_python plan "$bundle"
   section "Download"
@@ -233,8 +360,7 @@ for model in bundle.get("models") or []:
 PY
     mkdir -p "$local_dir"
     event "DOWNLOAD" "$(basename "$remote_path")" "$local_dir"
-    # shellcheck disable=SC2086
-    $hf download "$repo" "$remote_path" --local-dir "$local_dir"
+    "${HF_CMD[@]}" download "$repo" "$remote_path" --local-dir "$local_dir"
   done
   section "Status"
   catalog_python status "$bundle"
@@ -247,26 +373,33 @@ case "$command" in
     ;;
   list)
     shift
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage list; exit 0; fi
     [[ "$#" -eq 0 ]] || die "list takes no arguments" 2
     section "Model Bundles"
     catalog_python list
     ;;
   status)
     shift
-    [[ "$#" -le 1 ]] || die "status takes zero or one bundle" 2
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage status; exit 0; fi
+    parse_optional_profile_args status "$@"
+    [[ "${#MODEL_ARGS[@]}" -le 1 ]] || die "status takes zero or one bundle" 2
     section "Model Status"
-    catalog_python status "${1:-}"
+    catalog_python status "${MODEL_ARGS[0]:-}"
     ;;
   plan)
     shift
-    [[ "$#" -eq 1 ]] || die "plan requires one bundle" 2
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage plan; exit 0; fi
+    parse_optional_profile_args plan "$@"
+    [[ "${#MODEL_ARGS[@]}" -eq 1 ]] || die "plan requires one bundle" 2
     section "Model Plan"
-    catalog_python plan "$1"
+    catalog_python plan "${MODEL_ARGS[0]}"
     ;;
   download)
     shift
-    [[ "$#" -eq 1 ]] || die "download requires one bundle" 2
-    download_bundle "$1"
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage download; exit 0; fi
+    parse_optional_profile_args download "$@"
+    [[ "${#MODEL_ARGS[@]}" -eq 1 ]] || die "download requires one bundle" 2
+    download_bundle "${MODEL_ARGS[0]}"
     ;;
   "")
     usage >&2

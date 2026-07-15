@@ -89,7 +89,7 @@ EOF
 常用示例:
   ./scripts/env.sh use macos-mps
   ./scripts/env.sh use server-cuda-a10
-  ./scripts/check_env.sh
+  ./scripts/check_env.sh --profile .env
 EOF
       ;;
     show)
@@ -187,7 +187,7 @@ use_profile() {
   cp "$src" "$ENV_FILE"
   section "Activated"
   event "OK" "$name" ".env <- ${src#"$ROOT_DIR"/}"
-  event "NEXT" "check" "./scripts/check_env.sh"
+  event "NEXT" "check" "./scripts/check_env.sh --profile .env"
 }
 
 show_env() {

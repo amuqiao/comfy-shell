@@ -3,7 +3,7 @@
 #
 # This is a read-only diagnostic script. It reports missing prerequisites and
 # mismatches for the ComfyUI shell project; it never installs, downloads, or
-# executes values from .env/profile files.
+# executes values from profile files.
 
 set -euo pipefail
 
@@ -30,12 +30,12 @@ usage() {
   不 source .env 或执行 profile 文件中的任意内容,不支持 Docker 检查。
 
 配置:
-  --profile FILE      显式指定 profile env 文件。未指定时优先读取 .env; 不存在则只做基础检查。
+  --profile FILE      显式指定 profile env 文件。未指定时不读取 .env, 只做基础检查。
   --no-network        跳过 PyPI / GitHub / HuggingFace 只读 HEAD 连通性探测。
 
 默认行为:
-  未传 --profile 时, 优先读取仓库根目录 .env。
-  .env 不存在时, 仍输出系统、仓库和基础工具检查, profile 项显示 PENDING。
+  未传 --profile 时, 不读取仓库根目录 .env。
+  仍输出系统、仓库和基础工具检查, profile 项显示 PENDING。
   默认会对 PyPI / GitHub / HuggingFace 执行只读 HEAD 探测。
 
 输出:
@@ -53,6 +53,7 @@ usage() {
 常用示例:
   ./scripts/check_env.sh
   ./scripts/check_env.sh --no-network
+  ./scripts/check_env.sh --profile .env
   ./scripts/check_env.sh --profile configs/profiles/macos-mps.env.example
 
 Exit Codes:
@@ -242,7 +243,7 @@ PY
 check_profile() {
   section "PROFILE"
   if [[ -z "$PROFILE_FILE" ]]; then
-    event "PENDING" "profile" "no --profile and no .env"
+    event "PENDING" "profile" "no --profile; .env is not read implicitly"
     kv "推荐 macOS profile" "configs/profiles/macos-mps.env.example"
     kv "推荐 server profile" "configs/profiles/server-cuda-a10.env.example"
     return
@@ -443,7 +444,7 @@ check_python_runtime() {
   if [[ -z "$runtime_python" && -x "$COMFY_DIR/venv/bin/python" ]]; then
     runtime_python="$COMFY_DIR/venv/bin/python"
     event "WARN" "ComfyUI/venv" "$runtime_python"
-    note_warn "venv-location" "检测到 ComfyUI/venv, 但壳脚本只使用仓库根目录 .venv; 请运行 ./scripts/local.sh bootstrap"
+    note_warn "venv-location" "检测到 ComfyUI/venv, 但壳脚本只使用仓库根目录 .venv; 请运行 ./scripts/local.sh bootstrap --profile FILE"
   fi
   [[ -n "$runtime_python" ]] || runtime_python="$(command -v python3 2>/dev/null || true)"
   if [[ -z "$runtime_python" ]]; then
@@ -679,10 +680,6 @@ while [[ "$#" -gt 0 ]]; do
       ;;
   esac
 done
-
-if [[ -z "$PROFILE_FILE" && -f "$ROOT_DIR/.env" ]]; then
-  PROFILE_FILE="$ROOT_DIR/.env"
-fi
 
 OS_KIND="$(detect_os)"
 COMFY_PROFILE=""

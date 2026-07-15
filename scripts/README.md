@@ -14,17 +14,17 @@ nodes.sh                ComfyUI-Manager 依赖状态和安装
 models.sh               可选模型清单查看和显式下载
 remote.sh               远端项目 checkout 编排、隧道和 GPU 诊断
 verify.sh               scripts 最小可重复校验
-create-shell-submodule.sh  壳仓库脚手架
 ```
 
 当前阶段不提供 Docker 或第三方 custom nodes 管理入口。新增能力前，先判断它是否属于已有入口的子命令；只有职责边界不同、生命周期不同或安全边界不同，才新增顶层 `*.sh`。
+一次性脚手架和迁移工具放在 `tools/`，不算 `scripts/` 稳定操作入口。
 
 ## 入口职责
 
 Shell 入口默认只负责：
 
 - 定位仓库根目录和运行时路径。
-- 解析 `.env` 中的白名单配置键。
+- 解析显式 `--profile FILE` 中的白名单配置键。
 - 做轻量参数分发。
 - 提供稳定、可读、可复制的 help。
 - 调用 `uv`、Python 或 ComfyUI 入口完成明确动作。
@@ -53,18 +53,19 @@ Shell 入口默认只负责：
 
 ## 配置边界
 
-当前激活 profile 写在仓库根目录 `.env`，由 `./scripts/env.sh use <profile>` 生成。`.env` 不提交。
+profile 文件是被命令显式点名的数据文件。脚本不得默认读取仓库根目录 `.env`。
+`.env` 只是本地可选快捷文件，可由 `./scripts/env.sh use <profile>` 生成；需要使用时必须在命令里写 `--profile .env`。`.env` 不提交。
 
 配置读取规则：
 
 ```text
 脚本显式支持的 CLI 参数 / 进程环境变量
-> .env 中的白名单 profile 键
+> 显式 --profile FILE 中的白名单 profile 键
 > 脚本默认值
 ```
 
 不要把任意 profile 键都假设为可用命令前缀覆盖。比如当前 `local.sh bootstrap`
-从 `.env` 读取 `TORCH_INDEX_URL`，不会读取命令前缀里的
+从显式 `--profile FILE` 读取 `TORCH_INDEX_URL`，不会读取命令前缀里的
 `TORCH_INDEX_URL=...`。如果未来需要这种覆盖方式，先改实现，再改 help 示例。
 
 常见配置：
@@ -85,17 +86,17 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 
 帮助文档里的源配置示例按这个规则写：
 
-- `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap`
+- `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap --profile .env`
   可以作为命令前缀示例，因为它由 `uv` 自己读取。
 - `TORCH_INDEX_URL` 只作为 profile / `.env` 示例展示，不写成命令前缀，除非脚本实现已支持进程环境覆盖。
 
 ## 副作用边界
 
 - `env.sh use` 会写 `.env`。
-- `check_env.sh` 只读，不安装、不下载、不启动。
-- `local.sh bootstrap` 会创建或复用 `.venv`，创建 `.run/` 和 `logs/`，并安装 Python 依赖。
-- `local.sh start` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
-- `local.sh stop` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
+- `check_env.sh --profile FILE` 只读，不安装、不下载、不启动；未传 profile 时只做基础检查。
+- `local.sh bootstrap --profile FILE` 会创建或复用 `.venv`，创建 `.run/` 和 `logs/`，并安装 Python 依赖。
+- `local.sh start --profile FILE` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
+- `local.sh stop --profile FILE` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
 - `nodes.sh install manager` 会安装 `ComfyUI/manager_requirements.txt` 到 `.venv`。
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；`remote.sh status/ready/logs` 只读查看远端状态。
@@ -117,17 +118,19 @@ bash -n scripts/*.sh
 ./scripts/check_env.sh -h
 ./scripts/local.sh -h
 ./scripts/nodes.sh -h
+./scripts/models.sh -h
 ./scripts/remote.sh -h
 ./scripts/verify.sh -h
+./scripts/verify.sh check
 git diff --check
 ```
 
 修改 `local.sh` 的启动、停止、PID 或端口逻辑后，还需要用户显式执行真实启动验证：
 
 ```bash
-./scripts/local.sh start
-./scripts/local.sh status
-./scripts/local.sh stop
+./scripts/local.sh start --profile .env
+./scripts/local.sh status --profile .env
+./scripts/local.sh stop --profile .env
 ```
 
 ## 新增脚本 Checklist
@@ -136,6 +139,7 @@ git diff --check
 - 文件名是否稳定、可预测，并使用 `.sh`。
 - `-h` 是否说明作用域、不负责什么、命令、配置、输出、副作用、示例和退出码。
 - 是否避免 silent fallback；配置错误应快速失败。
+- 是否避免隐式读取 `.env`；需要 profile 时是否用显式 `--profile FILE`。
 - 是否避免执行 `.env` 或 profile 内容。
 - 是否明确哪些命令会访问网络、安装依赖、写文件或启动进程。
 - 是否完成最小验证。

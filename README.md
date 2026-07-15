@@ -12,6 +12,7 @@ comfy-shell/
   ComfyUI/           # submodule: git@github.com:Comfy-Org/ComfyUI.git, branch master
   configs/profiles/  # macOS MPS / Linux CUDA profile templates
   scripts/           # shell-managed local scripts
+  tools/             # one-off scaffolding tools
 ```
 
 ## First-Stage Architecture
@@ -20,10 +21,10 @@ The first stage deliberately does not support Docker. The supported path is:
 
 ```text
 uv + repository .venv
-profile env file
+explicit --profile file
 ComfyUI git submodule
 script-managed ComfyUI-Manager Python package readiness
-future script-managed model downloads and checks
+optional script-managed model catalog checks/downloads
 ```
 
 Third-party `custom_nodes` are intentionally not script-managed in this stage.
@@ -36,21 +37,21 @@ configs/profiles/macos-mps.env.example
 configs/profiles/server-cuda-a10.env.example
 ```
 
-Use a profile by copying it to `.env` and editing local paths:
+Pass a profile explicitly to scripts that need runtime settings:
 
 ```bash
-cp configs/profiles/macos-mps.env.example .env
-./scripts/check_env.sh
+./scripts/check_env.sh --profile configs/profiles/macos-mps.env.example
 ```
 
 For a server:
 
 ```bash
-cp configs/profiles/server-cuda-a10.env.example .env
-./scripts/check_env.sh
+./scripts/check_env.sh --profile configs/profiles/server-cuda-a10.env.example
 ```
 
-The `.env` file is the active local profile and should not be committed.
+`.env` is optional local shorthand created by `./scripts/env.sh use <profile>`.
+Scripts do not read it implicitly; pass `--profile .env` when you want to use it.
+Do not commit `.env`.
 
 ## Clone
 
@@ -110,10 +111,10 @@ Use the shell scripts to prepare and run ComfyUI with Manager enabled:
 
 ```bash
 ./scripts/env.sh use macos-mps
-./scripts/check_env.sh --no-network
-./scripts/local.sh bootstrap
-./scripts/local.sh start
-./scripts/local.sh status
+./scripts/check_env.sh --profile .env --no-network
+./scripts/local.sh bootstrap --profile .env
+./scripts/local.sh start --profile .env
+./scripts/local.sh status --profile .env
 ```
 
 Open:
@@ -126,8 +127,8 @@ Useful lifecycle commands:
 
 ```bash
 ./scripts/local.sh logs
-./scripts/local.sh stop
-./scripts/local.sh restart
+./scripts/local.sh stop --profile .env
+./scripts/local.sh restart --profile .env
 ./scripts/nodes.sh status
 ```
 
@@ -135,7 +136,8 @@ Useful lifecycle commands:
 requirements, and installs `ComfyUI/manager_requirements.txt` so `local.sh start`
 can run `ComfyUI/main.py --enable-manager`. Startup arguments are assembled
 from structured profile keys such as `COMFY_HOST`, `COMFY_PORT`, and
-`CUDA_VISIBLE_DEVICES`; profile files are parsed as data and are not executed.
+`CUDA_VISIBLE_DEVICES`; profile files are parsed as data, only when passed with
+`--profile`, and are not executed.
 The shell script itself does not download models or install third-party
 `custom_nodes`. Because `start` enables upstream ComfyUI-Manager, Manager may
 run its own startup security checks or complete tasks that were previously
@@ -143,19 +145,19 @@ scheduled from the UI.
 
 ## Remote Server Run
 
-For the fixed CUDA server, use the named remote target from your local checkout:
+Remote development uses explicit, copyable connection parameters:
 
 ```bash
-./scripts/remote.sh sync --target server-a10 --yes
-./scripts/remote.sh bootstrap --target server-a10 --yes
-./scripts/remote.sh start --target server-a10 --yes
-./scripts/remote.sh status --target server-a10
-./scripts/remote.sh tunnel --target server-a10
+./scripts/remote.sh sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example --yes
+./scripts/remote.sh start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example --yes
+./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example
+./scripts/remote.sh tunnel --host wangqiao@47.94.108.140 --local-port 8188 --remote-port 8188
+./scripts/remote.sh gpu --host wangqiao@47.94.108.140
 ```
 
-`--target server-a10` reads `configs/remotes/server-a10.env.example`. Use explicit
-`--host` / `--dir` when the host or remote checkout directory is different.
-GPU diagnostics are available through `./scripts/remote.sh gpu --target server-a10`.
+`remote.sh` does not read `configs/remotes` and does not support hidden targets.
+Commands print the resolved remote plan before write/lifecycle actions.
 
 ## Business Tutorial
 

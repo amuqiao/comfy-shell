@@ -74,18 +74,18 @@
 
 ```bash
 ./scripts/env.sh use macos-mps
-./scripts/check_env.sh --no-network
-./scripts/local.sh bootstrap
-./scripts/local.sh start
-./scripts/local.sh status
+./scripts/check_env.sh --profile .env --no-network
+./scripts/local.sh bootstrap --profile .env
+./scripts/local.sh start --profile .env
+./scripts/local.sh status --profile .env
 ```
 
 如果已经 bootstrap 过，日常只需要：
 
 ```bash
 ./scripts/nodes.sh status
-./scripts/local.sh start
-./scripts/local.sh status
+./scripts/local.sh start --profile .env
+./scripts/local.sh status --profile .env
 ```
 
 第一次实验前准备目录：

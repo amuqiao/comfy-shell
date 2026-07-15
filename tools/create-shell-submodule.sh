@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE_TEXT'
 用法:
-  create-shell-submodule.sh --parent-url URL --parent-branch BRANCH --child-url URL --child-branch BRANCH --target-dir DIR --child-path PATH (--yes|--dry-run)
+  tools/create-shell-submodule.sh --parent-url URL --parent-branch BRANCH --child-url URL --child-branch BRANCH --target-dir DIR --child-path PATH (--yes|--dry-run)
 
 创建一个父壳仓库骨架，并把一个上游项目作为 Git 子模块挂载进去。
 
@@ -34,7 +34,7 @@ usage() {
   远端访问由 git clone 和 git submodule add 完成。--dry-run 不会检查克隆后才存在的仓库内容。
 
 示例:
-  scripts/create-shell-submodule.sh \
+  tools/create-shell-submodule.sh \
     --parent-url git@github.com:amuqiao/comfy-shell.git \
     --parent-branch main \
     --child-url git@github.com:Comfy-Org/ComfyUI.git \
@@ -43,7 +43,7 @@ usage() {
     --child-path ComfyUI \
     --yes
 
-  scripts/create-shell-submodule.sh \
+  tools/create-shell-submodule.sh \
     --parent-url git@github.com:amuqiao/comfy-shell.git \
     --parent-branch main \
     --child-url git@github.com:Comfy-Org/ComfyUI.git \
