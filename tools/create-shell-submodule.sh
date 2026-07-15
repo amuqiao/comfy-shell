@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE_TEXT'
 用法:
-  tools/create-shell-submodule.sh --parent-url URL --parent-branch BRANCH --child-url URL --child-branch BRANCH --target-dir DIR --child-path PATH (--yes|--dry-run)
+  tools/create-shell-submodule.sh --parent-url URL --parent-branch BRANCH --child-url URL --child-branch BRANCH --output-dir DIR --child-path PATH (--yes|--dry-run)
 
 创建一个父壳仓库骨架，并把一个上游项目作为 Git 子模块挂载进去。
 
@@ -13,7 +13,7 @@ usage() {
   --parent-branch NAME   要克隆的父壳仓库分支，例如 main。
   --child-url URL         要作为子模块添加的子项目仓库地址。
   --child-branch NAME    子项目要跟踪的分支，会写入 .gitmodules。
-  --target-dir DIR       新壳仓库的本地目录。该目录不能已经存在。
+  --output-dir DIR       新壳仓库的本地目录。该目录不能已经存在。
   --child-path PATH      子项目在壳仓库中的相对路径，例如 ComfyUI。
   --yes                  确认执行克隆、文件写入和子模块添加。
   --dry-run              只校验参数并打印顶层计划动作，不写文件。
@@ -30,7 +30,7 @@ usage() {
   进度、诊断和错误输出到 stderr。最终摘要、git status 和下一步命令输出到 stdout。
 
 副作用与保护边界:
-  真实执行必须传 --yes。脚本拒绝复用已有目标目录或已有子项目路径。
+  真实执行必须传 --yes。脚本拒绝复用已有输出目录或已有子项目路径。
   远端访问由 git clone 和 git submodule add 完成。--dry-run 不会检查克隆后才存在的仓库内容。
 
 示例:
@@ -39,7 +39,7 @@ usage() {
     --parent-branch main \
     --child-url git@github.com:Comfy-Org/ComfyUI.git \
     --child-branch master \
-    --target-dir /Users/admin/Downloads/Code/comfy-shell \
+    --output-dir /Users/admin/Downloads/Code/comfy-shell \
     --child-path ComfyUI \
     --yes
 
@@ -48,7 +48,7 @@ usage() {
     --parent-branch main \
     --child-url git@github.com:Comfy-Org/ComfyUI.git \
     --child-branch master \
-    --target-dir /tmp/comfy-shell-check \
+    --output-dir /tmp/comfy-shell-check \
     --child-path ComfyUI \
     --dry-run
 
@@ -114,7 +114,7 @@ validate_child_path() {
     error "--child-path contains unsupported characters: $value"
   fi
   if [[ "$value" == *//* || "$value" == ".git" || "$value" == .git/* || "$value" == */.git || "$value" == */.git/* ]]; then
-    error "--child-path must not target .git or contain empty path segments"
+    error "--child-path must not point at .git or contain empty path segments"
   fi
 
   local top_segment="${value%%/*}"
@@ -125,21 +125,21 @@ validate_child_path() {
   esac
 }
 
-validate_target_dir() {
+validate_output_dir() {
   local value="$1"
   if [[ -z "$value" ]]; then
-    error "--target-dir is required"
+    error "--output-dir is required"
   fi
   if [[ "$value" == -* ]]; then
-    error "--target-dir must not start with '-'"
+    error "--output-dir must not start with '-'"
   fi
   local parent_dir
   parent_dir="$(dirname "$value")"
   if [[ ! -d "$parent_dir" ]]; then
-    error "target parent directory does not exist: $parent_dir"
+    error "output parent directory does not exist: $parent_dir"
   fi
   if [[ -e "$value" ]]; then
-    error "target directory already exists: $value"
+    error "output directory already exists: $value"
   fi
 }
 
@@ -185,7 +185,7 @@ parent_url=""
 parent_branch=""
 child_url=""
 child_branch=""
-target_dir=""
+output_dir=""
 child_path=""
 yes="0"
 dry_run="0"
@@ -212,9 +212,9 @@ while [[ $# -gt 0 ]]; do
       child_branch="$2"
       shift 2
       ;;
-    --target-dir)
+    --output-dir)
       require_value "$1" "${2:-}"
-      target_dir="$2"
+      output_dir="$2"
       shift 2
       ;;
     --child-path)
@@ -244,7 +244,7 @@ done
 [[ -n "$child_url" ]] || error "--child-url is required"
 validate_ref_name "--parent-branch" "$parent_branch"
 validate_ref_name "--child-branch" "$child_branch"
-validate_target_dir "$target_dir"
+validate_output_dir "$output_dir"
 validate_child_path "$child_path"
 require_command git
 require_command dirname
@@ -257,19 +257,19 @@ fi
 info "Creating shell repository skeleton"
 info "parent: $parent_url ($parent_branch)"
 info "child:  $child_url ($child_branch) -> $child_path"
-info "target: $target_dir"
+info "output: $output_dir"
 
 if [[ "$dry_run" == "1" ]]; then
-  run git clone --branch "$parent_branch" --single-branch "$parent_url" "$target_dir"
-  run git -C "$target_dir" submodule add -b "$child_branch" "$child_url" "$child_path"
-  run mkdir -p "$target_dir/scripts" "$target_dir/configs"
-  run touch "$target_dir/scripts/.gitkeep" "$target_dir/configs/.gitkeep"
-  run git -C "$target_dir" add .gitmodules "$child_path" README.md scripts/.gitkeep configs/.gitkeep
+  run git clone --branch "$parent_branch" --single-branch "$parent_url" "$output_dir"
+  run git -C "$output_dir" submodule add -b "$child_branch" "$child_url" "$child_path"
+  run mkdir -p "$output_dir/scripts" "$output_dir/configs"
+  run touch "$output_dir/scripts/.gitkeep" "$output_dir/configs/.gitkeep"
+  run git -C "$output_dir" add .gitmodules "$child_path" README.md scripts/.gitkeep configs/.gitkeep
   exit 0
 fi
 
-run git clone --branch "$parent_branch" --single-branch "$parent_url" "$target_dir"
-cd "$target_dir"
+run git clone --branch "$parent_branch" --single-branch "$parent_url" "$output_dir"
+cd "$output_dir"
 repo_root="$(pwd -P)"
 
 if [[ -e "$child_path" ]]; then
@@ -324,10 +324,10 @@ fi
 
 run git add .gitmodules "$child_path" README.md scripts/.gitkeep configs/.gitkeep
 
-printf 'Skeleton created at %s\n' "$target_dir"
+printf 'Skeleton created at %s\n' "$output_dir"
 printf '\nStaged changes:\n'
 git status --short
 printf '\nNext steps:\n'
-printf '  cd %s\n' "$target_dir"
+printf '  cd %s\n' "$output_dir"
 printf '  git diff --cached --stat\n'
 printf '  git commit -m "Add %s submodule shell"\n' "$child_path"

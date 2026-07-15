@@ -39,7 +39,7 @@ usage() {
 
 配置来源:
   显式 CLI 参数是唯一稳定入口: --host、--dir、--profile、--url、--local-port、--remote-port。
-  本脚本不读取 configs/remotes, 不支持 --target, 不隐式补齐 host、dir、profile 或端口。
+  本脚本不隐式补齐 host、dir、profile 或端口。
   --profile 是远端 checkout 内的 profile 文件路径, 由远端 local.sh 按白名单 key 解析。
 
 副作用与保护边界:

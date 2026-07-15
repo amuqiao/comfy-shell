@@ -355,8 +355,8 @@ for model in bundle.get("models") or []:
     if model.get("source", "huggingface") != "huggingface":
         print(f"ERROR: unsupported source for {model['id']}", file=sys.stderr)
         raise SystemExit(2)
-    target_dir = model_root / model["directory"]
-    print(f"{model['repo']}\t{model['path']}\t{target_dir}")
+    local_dir = model_root / model["directory"]
+    print(f"{model['repo']}\t{model['path']}\t{local_dir}")
 PY
     mkdir -p "$local_dir"
     event "DOWNLOAD" "$(basename "$remote_path")" "$local_dir"

@@ -156,7 +156,6 @@ Remote development uses explicit, copyable connection parameters:
 ./scripts/remote.sh gpu --host wangqiao@47.94.108.140
 ```
 
-`remote.sh` does not read `configs/remotes` and does not support hidden targets.
 Commands print the resolved remote plan before write/lifecycle actions.
 
 ## Business Tutorial

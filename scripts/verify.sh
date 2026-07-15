@@ -118,7 +118,7 @@ section "Read-only Smoke"
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --target server-a10
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile .env

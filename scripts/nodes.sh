@@ -11,7 +11,7 @@ UV_BIN="${UV_BIN:-uv}"
 usage() {
   cat <<'EOF'
 用法:
-  ./scripts/nodes.sh <command> [target]
+  ./scripts/nodes.sh <command> [component]
   ./scripts/nodes.sh -h|--help
 
 作用域:
@@ -165,8 +165,8 @@ case "$command" in
   install)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage install-manager; exit 0; fi
-    target="${1:-}"
-    [[ "$target" == "manager" ]] || die "install requires target: manager" 2
+    component="${1:-}"
+    [[ "$component" == "manager" ]] || die "install requires component: manager" 2
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage install-manager; exit 0; fi
     [[ "$#" -eq 0 ]] || die "install manager takes no arguments" 2
