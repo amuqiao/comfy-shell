@@ -3,7 +3,9 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+
 CATALOG_FILE="${CATALOG_FILE:-$ROOT_DIR/configs/models/catalog.yaml}"
 PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/.venv/bin/python}"
 UV_BIN="${UV_BIN:-uv}"
@@ -39,8 +41,9 @@ usage() {
   help                显示本帮助
 
 配置与环境变量:
-  --profile FILE      status/plan/download 可显式指定 profile env 文件。
-  COMFY_MODEL_ROOT    从显式 profile 读取; 未传 --profile 时固定默认 ./ComfyUI/models。
+  默认读取仓库根目录 .env。
+  --profile FILE      status/plan/download 可显式指定其他配置文件。
+  COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
   HF_ENDPOINT         可选, 例如 https://hf-mirror.com
   CATALOG_FILE        可选, 覆盖 catalog 路径
   PYTHON_BIN          可选, 覆盖 Python 路径
@@ -48,16 +51,16 @@ usage() {
 
 副作用与保护边界:
   list/status/plan 只读, 不访问网络。
-  download 会创建模型子目录并写模型文件; 默认写入 ComfyUI/models 下的模型资产目录。
+  download 会创建模型子目录并写模型文件; 写入 COMFY_MODEL_ROOT 下的模型资产目录。
   download 必须由用户显式执行, 不修改 ComfyUI 已跟踪源码文件。
   所有相对模型路径按仓库根目录解析。
 
 常用示例:
   ./scripts/models.sh list
   ./scripts/models.sh status
-  ./scripts/models.sh status heroine-i2v-core --profile .env
+  ./scripts/models.sh status heroine-i2v-core
   ./scripts/models.sh plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example
-  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core --profile .env
+  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
   ./scripts/models.sh plan heroine-t2v-explore
 
 Exit Codes:
@@ -78,7 +81,7 @@ command_usage() {
   ./scripts/models.sh list -h|--help
 
 作用域:
-  列出 catalog 中的 bundle。list 不需要 profile, 也不读取 .env。
+  列出 catalog 中的 bundle。list 不读取配置文件。
 EOF
       ;;
     status)
@@ -91,12 +94,12 @@ EOF
   检查 bundle 模型文件是否存在且非空。
 
 配置:
-  --profile FILE      可选; 只从显式 profile 读取 COMFY_MODEL_ROOT。
-  默认模型根目录     未传 --profile 时使用 ./ComfyUI/models, 不隐式读取 .env。
+  默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
 
 常用示例:
   ./scripts/models.sh status
-  ./scripts/models.sh status heroine-i2v-core --profile .env
+  ./scripts/models.sh status heroine-i2v-core
   ./scripts/models.sh status --profile configs/profiles/macos-mps.env.example
 EOF
       ;;
@@ -110,12 +113,11 @@ EOF
   输出下载目标路径和 hf download 命令, 不访问网络。
 
 配置:
-  --profile FILE      可选; 只从显式 profile 读取 COMFY_MODEL_ROOT。
-  默认模型根目录     未传 --profile 时使用 ./ComfyUI/models, 不隐式读取 .env。
+  默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
 
 常用示例:
   ./scripts/models.sh plan heroine-i2v-core
-  ./scripts/models.sh plan heroine-i2v-core --profile .env
   ./scripts/models.sh plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example
 EOF
       ;;
@@ -129,13 +131,12 @@ EOF
   显式下载 bundle 中的模型文件。
 
 配置:
-  --profile FILE      可选; 只从显式 profile 读取 COMFY_MODEL_ROOT。
-  默认模型根目录     未传 --profile 时使用 ./ComfyUI/models, 不隐式读取 .env。
+  默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
   HF_ENDPOINT         可选环境变量, 例如 https://hf-mirror.com。
 
 常用示例:
   HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
-  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core --profile .env
   ./scripts/models.sh download heroine-i2v-core --profile configs/profiles/macos-mps.env.example
 EOF
       ;;
@@ -146,67 +147,21 @@ EOF
   esac
 }
 
-die() {
-  printf 'ERROR: %s\n' "$1" >&2
-  exit "${2:-1}"
-}
-
-section() {
-  printf '\n===== %s =====\n' "$1"
-}
-
-event() {
-  printf '%-10s %-22s %s\n' "$1" "$2" "${3:-}"
-}
-
-env_value_from() {
-  local key="$1"
-  local file="$2"
-  [[ -f "$file" ]] || return 0
-  awk -v key="$key" '
-    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
-    {
-      line=$0
-      sub(/^[[:space:]]*export[[:space:]]+/, "", line)
-      pattern="^[[:space:]]*" key "[[:space:]]*="
-      if (line ~ pattern) {
-        sub(/^[^=]*=/, "", line)
-        sub(/[[:space:]]+#.*$/, "", line)
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
-        if (line ~ /^".*"$/ || line ~ /^'\''.*'\''$/) {
-          line=substr(line, 2, length(line) - 2)
-        }
-        value=line
-      }
-    }
-    END { if (value != "") print value }
-  ' "$file"
-}
-
-resolve_path() {
-  case "$1" in
-    /*) printf '%s' "$1" ;;
-    *) printf '%s/%s' "$ROOT_DIR" "$1" ;;
-  esac
-}
-
 MODEL_ARGS=()
-PROFILE_FILE=""
 
 parse_optional_profile_args() {
   local command_name="$1"
   shift
   MODEL_ARGS=()
-  PROFILE_FILE=""
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
       --profile)
         [[ "$#" -ge 2 ]] || die "--profile requires a file" 2
-        PROFILE_FILE="$2"
+        set_config_file "$2"
         shift 2
         ;;
       --profile=*)
-        PROFILE_FILE="${1#--profile=}"
+        set_config_file "${1#--profile=}"
         shift
         ;;
       -*)
@@ -218,19 +173,12 @@ parse_optional_profile_args() {
         ;;
     esac
   done
-  if [[ -n "$PROFILE_FILE" ]]; then
-    PROFILE_FILE="$(resolve_path "$PROFILE_FILE")"
-    [[ -f "$PROFILE_FILE" ]] || die "profile not found: $PROFILE_FILE" 2
-  fi
 }
 
 model_root() {
-  local configured="./ComfyUI/models"
-  if [[ -n "${PROFILE_FILE:-}" ]]; then
-    configured="$(env_value_from COMFY_MODEL_ROOT "$PROFILE_FILE")"
-    configured="${configured:-./ComfyUI/models}"
-  fi
-  configured="${configured:-./ComfyUI/models}"
+  local configured
+  require_config_file
+  configured="$(required_config_value COMFY_MODEL_ROOT)"
   case "$configured" in
     /*) printf '%s' "$configured" ;;
     *) printf '%s/%s' "$ROOT_DIR" "$configured" ;;
@@ -243,8 +191,8 @@ require_catalog() {
 
 require_python_yaml() {
   [[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="$(command -v python3 2>/dev/null || true)"
-  [[ -n "$PYTHON_BIN" ]] || die "python not found; run ./scripts/local.sh bootstrap --profile FILE first" 2
-  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1 || die "PyYAML not available in $PYTHON_BIN; run ./scripts/local.sh bootstrap --profile FILE first" 2
+  [[ -n "$PYTHON_BIN" ]] || die "python not found; run ./scripts/local.sh bootstrap first" 2
+  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1 || die "PyYAML not available in $PYTHON_BIN; run ./scripts/local.sh bootstrap first" 2
 import yaml
 PY
 }

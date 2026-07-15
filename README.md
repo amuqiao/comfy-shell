@@ -1,7 +1,7 @@
 # comfy-shell
 
 Thin shell repository for managing ComfyUI across macOS learning machines and
-Linux CUDA servers. The shell owns environment profiles, scripts, model paths,
+Linux CUDA servers. The shell owns the root `.env` config, scripts, model paths,
 ComfyUI-Manager readiness, and process lifecycle. The upstream ComfyUI source
 stays inside the `ComfyUI/` submodule.
 
@@ -10,7 +10,7 @@ stays inside the `ComfyUI/` submodule.
 ```text
 comfy-shell/
   ComfyUI/           # submodule: git@github.com:Comfy-Org/ComfyUI.git, branch master
-  configs/profiles/  # macOS MPS / Linux CUDA profile templates
+  configs/profiles/  # optional macOS MPS / Linux CUDA config examples
   scripts/           # shell-managed local scripts
   tools/             # one-off scaffolding tools
 ```
@@ -21,7 +21,7 @@ The first stage deliberately does not support Docker. The supported path is:
 
 ```text
 uv + repository .venv
-explicit --profile file
+default root .env config
 ComfyUI git submodule
 script-managed ComfyUI-Manager Python package readiness
 optional script-managed model catalog checks/downloads
@@ -30,28 +30,21 @@ optional script-managed model catalog checks/downloads
 Third-party `custom_nodes` are intentionally not script-managed in this stage.
 Use the ComfyUI web UI / Manager UI manually after the local service is running.
 
-Recommended profiles:
-
-```text
-configs/profiles/macos-mps.env.example
-configs/profiles/server-cuda-a10.env.example
-```
-
-Pass a profile explicitly to scripts that need runtime settings:
+Create `.env` once before running lifecycle commands:
 
 ```bash
-./scripts/check_env.sh --profile configs/profiles/macos-mps.env.example
+cp configs/profiles/macos-mps.env.example .env
 ```
 
-For a server:
+For a server checkout:
 
 ```bash
-./scripts/check_env.sh --profile configs/profiles/server-cuda-a10.env.example
+cp configs/profiles/server-cuda-a10.env.example .env
 ```
 
-`.env` is optional local shorthand created by `./scripts/env.sh use <profile>`.
-Scripts do not read it implicitly; pass `--profile .env` when you want to use it.
-Do not commit `.env`.
+Scripts read `.env` by default. Process environment variables override `.env`
+values. Use `--profile FILE` only when you intentionally want a one-command
+override from another config file. Do not commit `.env`.
 
 ## Clone
 
@@ -96,12 +89,11 @@ Run the project-specific environment report before bootstrap or deployment:
 
 ```bash
 ./scripts/check_env.sh
-./scripts/check_env.sh --profile configs/profiles/server-cuda-a10.env.example
 ./scripts/check_env.sh --no-network
 ```
 
 The check is read-only. It verifies the shell repository, ComfyUI submodule,
-profile values, Python/uv, CUDA or MPS expectations, PyTorch import status,
+config values, Python/uv, CUDA or MPS expectations, PyTorch import status,
 model/output paths, port `8188`, and basic network reachability. It does not
 install dependencies, download models, or start ComfyUI.
 
@@ -110,11 +102,11 @@ install dependencies, download models, or start ComfyUI.
 Use the shell scripts to prepare and run ComfyUI with Manager enabled:
 
 ```bash
-./scripts/env.sh use macos-mps
-./scripts/check_env.sh --profile .env --no-network
-./scripts/local.sh bootstrap --profile .env
-./scripts/local.sh start --profile .env
-./scripts/local.sh status --profile .env
+cp configs/profiles/macos-mps.env.example .env
+./scripts/check_env.sh --no-network
+./scripts/local.sh bootstrap
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 Open:
@@ -127,17 +119,16 @@ Useful lifecycle commands:
 
 ```bash
 ./scripts/local.sh logs
-./scripts/local.sh stop --profile .env
-./scripts/local.sh restart --profile .env
+./scripts/local.sh stop
+./scripts/local.sh restart
 ./scripts/nodes.sh status
 ```
 
 `local.sh bootstrap` creates the repository `.venv`, installs ComfyUI
 requirements, and installs `ComfyUI/manager_requirements.txt` so `local.sh start`
 can run `ComfyUI/main.py --enable-manager`. Startup arguments are assembled
-from structured profile keys such as `COMFY_HOST`, `COMFY_PORT`, and
-`CUDA_VISIBLE_DEVICES`; profile files are parsed as data, only when passed with
-`--profile`, and are not executed.
+from structured config keys such as `COMFY_HOST`, `COMFY_PORT`, and
+`CUDA_VISIBLE_DEVICES`; config files are parsed as data and are not executed.
 The shell script itself does not download models or install third-party
 `custom_nodes`. Because `start` enables upstream ComfyUI-Manager, Manager may
 run its own startup security checks or complete tasks that were previously
@@ -149,9 +140,10 @@ Remote development uses explicit, copyable connection parameters:
 
 ```bash
 ./scripts/remote.sh sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example --yes
-./scripts/remote.sh start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example --yes
-./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example
+ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp configs/profiles/server-cuda-a10.env.example .env'
+./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+./scripts/remote.sh start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
 ./scripts/remote.sh tunnel --host wangqiao@47.94.108.140 --local-port 8188 --remote-port 8188
 ./scripts/remote.sh gpu --host wangqiao@47.94.108.140
 ```

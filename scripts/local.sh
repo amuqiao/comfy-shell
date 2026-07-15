@@ -3,7 +3,9 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+
 COMFY_DIR="$ROOT_DIR/ComfyUI"
 RUN_DIR="$ROOT_DIR/.run"
 LOG_DIR="$ROOT_DIR/logs"
@@ -17,7 +19,7 @@ LOCK_HELD=0
 usage() {
   cat <<'EOF'
 用法:
-  ./scripts/local.sh <command> --profile FILE
+  ./scripts/local.sh <command> [--profile FILE]
   ./scripts/local.sh logs
   ./scripts/local.sh -h|--help
 
@@ -30,7 +32,7 @@ usage() {
   Requires: Bash, uv, curl
   Recommended: lsof
   Note: stale PID / port-owner recovery requires lsof.
-  Python: 由 uv 按显式 profile 中 COMFY_PYTHON 创建到仓库根目录 .venv。
+  Python: 由 uv 按配置中的 COMFY_PYTHON 创建到仓库根目录 .venv。
 
 命令:
   bootstrap     使用 uv 创建 .venv, 安装 ComfyUI 和 ComfyUI-Manager 依赖
@@ -42,12 +44,13 @@ usage() {
   help          显示本帮助
 
 配置:
-  bootstrap/start/stop/restart/status 必须显式传 --profile FILE。
+  bootstrap/start/stop/restart/status 默认读取仓库根目录 .env。
+  如需读取其他配置文件, 必须显式传 --profile FILE。
   logs 只读取 logs/comfyui.log, 不需要 profile。
-  本脚本不会默认读取仓库根目录 .env。
+  进程环境变量优先于配置文件值。
   COMFY_HOST          本机阶段只允许 127.0.0.1 / localhost / ::1
-  COMFY_PORT          默认 8188
-  COMFY_PYTHON        uv 创建 .venv 使用的 Python 版本, 默认 3.12
+  COMFY_PORT          ComfyUI 监听端口
+  COMFY_PYTHON        uv 创建 .venv 使用的 Python 版本
   TORCH_PRE           true 时 PyTorch 安装传 --pre
   TORCH_INDEX_URL     只用于 torch / torchvision / torchaudio 安装
   UV_INDEX_URL        uv 自身读取的默认包索引, 可临时设为国内 PyPI 镜像
@@ -86,13 +89,12 @@ usage() {
   start 不会执行脚本级依赖安装; Manager 不可导入时直接失败。
 
 常用示例:
-  ./scripts/env.sh use macos-mps
-  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap --profile .env
+  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
   ./scripts/local.sh bootstrap --profile configs/profiles/macos-mps.env.example
-  ./scripts/local.sh start --profile .env
-  ./scripts/local.sh status --profile .env
+  ./scripts/local.sh start
+  ./scripts/local.sh status
   ./scripts/local.sh logs
-  ./scripts/local.sh stop --profile .env
+  ./scripts/local.sh stop
 
 Exit Codes:
   0  成功
@@ -108,7 +110,7 @@ command_usage() {
     bootstrap)
       cat <<'EOF'
 用法:
-  ./scripts/local.sh bootstrap --profile FILE
+  ./scripts/local.sh bootstrap [--profile FILE]
   ./scripts/local.sh bootstrap -h|--help
 
 作用域:
@@ -116,17 +118,19 @@ command_usage() {
   和 ComfyUI-Manager requirements。
 
 配置与环境变量:
-  --profile FILE 中 TORCH_PRE=true 时, PyTorch 安装传 --pre。
-  --profile FILE 中 TORCH_INDEX_URL 只影响 torch / torchvision / torchaudio。
+  默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  进程环境变量优先于配置文件值。
+  TORCH_PRE=true 时, PyTorch 安装传 --pre。
+  TORCH_INDEX_URL 只影响 torch / torchvision / torchaudio。
   UV_INDEX_URL 可在命令前临时设置, 影响 ComfyUI requirements 和 Manager
   requirements 等普通 PyPI 依赖。
 
 PyTorch wheel 源示例:
-  macos-mps profile:
+  macos-mps config example:
     TORCH_PRE=true
     TORCH_INDEX_URL=https://download.pytorch.org/whl/nightly/cpu
 
-  server-cuda-a10 profile:
+  server-cuda-a10 config example:
     TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
 
 成功标准:
@@ -138,23 +142,22 @@ PyTorch wheel 源示例:
   会访问网络并写入 .venv、.run/、logs/。不会下载模型,不会启动 ComfyUI。
 
 常用示例:
-  ./scripts/env.sh use macos-mps
-  ./scripts/local.sh bootstrap --profile .env
   ./scripts/local.sh bootstrap --profile configs/profiles/macos-mps.env.example
-  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap --profile .env
+  ./scripts/local.sh bootstrap
+  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
 EOF
       ;;
     start)
       cat <<'EOF'
 用法:
-  ./scripts/local.sh start --profile FILE
+  ./scripts/local.sh start [--profile FILE]
   ./scripts/local.sh start -h|--help
 
 作用域:
   后台启动本机 ComfyUI, 自动传 --enable-manager, 并轮询 /system_stats。
 
 前置条件:
-  已显式传入可用 profile。
+  .env 存在, 或已显式传入 --profile FILE。
   .venv 已创建。
   comfyui_manager 可 import；否则先执行 ./scripts/nodes.sh install manager。
 
@@ -169,15 +172,15 @@ EOF
   浏览器可打开同一个 URL。
 
 常用示例:
-  ./scripts/local.sh start --profile .env
+  ./scripts/local.sh start
   ./scripts/local.sh start --profile configs/profiles/macos-mps.env.example
-  ./scripts/local.sh status --profile .env
+  ./scripts/local.sh status
 EOF
       ;;
     stop)
       cat <<'EOF'
 用法:
-  ./scripts/local.sh stop --profile FILE
+  ./scripts/local.sh stop [--profile FILE]
   ./scripts/local.sh stop -h|--help
 
 作用域:
@@ -189,35 +192,35 @@ EOF
   只有 port owner 命令行匹配当前 .venv、host、port 和 --enable-manager 时才停止。
 
 常用示例:
-  ./scripts/local.sh stop --profile .env
+  ./scripts/local.sh stop
   ./scripts/local.sh stop --profile configs/profiles/macos-mps.env.example
 EOF
       ;;
     restart)
       cat <<'EOF'
 用法:
-  ./scripts/local.sh restart --profile FILE
+  ./scripts/local.sh restart [--profile FILE]
   ./scripts/local.sh restart -h|--help
 
 作用域:
   先 stop 再 start 本机 ComfyUI。
 
 常用示例:
-  ./scripts/local.sh restart --profile .env
+  ./scripts/local.sh restart
   ./scripts/local.sh restart --profile configs/profiles/macos-mps.env.example
 EOF
       ;;
     status)
       cat <<'EOF'
 用法:
-  ./scripts/local.sh status --profile FILE
+  ./scripts/local.sh status [--profile FILE]
   ./scripts/local.sh status -h|--help
 
 作用域:
   只读查看本机 ComfyUI PID、URL、日志路径和 /system_stats 可达性。
 
 常用示例:
-  ./scripts/local.sh status --profile .env
+  ./scripts/local.sh status
   ./scripts/local.sh status --profile configs/profiles/macos-mps.env.example
 EOF
       ;;
@@ -241,11 +244,6 @@ EOF
   esac
 }
 
-die() {
-  printf 'ERROR: %s\n' "$1" >&2
-  exit "${2:-1}"
-}
-
 release_lifecycle_lock() {
   if [[ "$LOCK_HELD" -eq 1 ]]; then
     rmdir "$LOCK_DIR" 2>/dev/null || true
@@ -263,90 +261,44 @@ acquire_lifecycle_lock() {
   fi
 }
 
-section() {
-  printf '\n===== %s =====\n' "$1"
-}
-
-event() {
-  printf '%-10s %-18s %s\n' "$1" "$2" "${3:-}"
-}
-
-env_value_from() {
-  local key="$1"
-  local file="$2"
-  [[ -f "$file" ]] || return 0
-  awk -v key="$key" '
-    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
-    {
-      line=$0
-      sub(/^[[:space:]]*export[[:space:]]+/, "", line)
-      pattern="^[[:space:]]*" key "[[:space:]]*="
-      if (line ~ pattern) {
-        sub(/^[^=]*=/, "", line)
-        sub(/[[:space:]]+#.*$/, "", line)
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
-        if (line ~ /^".*"$/ || line ~ /^'\''.*'\''$/) {
-          line=substr(line, 2, length(line) - 2)
-        }
-        value=line
-      }
-    }
-    END { if (value != "") print value }
-  ' "$file"
-}
-
-parse_required_profile_args() {
+parse_config_args() {
   local command_name="$1"
   shift
-  PROFILE_FILE=""
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
       --profile)
         [[ "$#" -ge 2 ]] || die "--profile requires a file" 2
-        PROFILE_FILE="$2"
+        set_config_file "$2"
         shift 2
         ;;
       --profile=*)
-        PROFILE_FILE="${1#--profile=}"
+        set_config_file "${1#--profile=}"
         shift
         ;;
       *)
-        die "$command_name takes only --profile FILE" 2
+        die "$command_name takes only optional --profile FILE" 2
         ;;
     esac
   done
-  [[ -n "$PROFILE_FILE" ]] || die "$command_name requires --profile FILE" 2
-  case "$PROFILE_FILE" in
-    /*) ;;
-    *) PROFILE_FILE="$ROOT_DIR/$PROFILE_FILE" ;;
-  esac
-  [[ -f "$PROFILE_FILE" ]] || die "profile not found: $PROFILE_FILE" 2
+  require_config_file
 }
 
-load_profile() {
-  [[ -n "${PROFILE_FILE:-}" ]] || die "missing --profile FILE" 2
-  [[ -f "$PROFILE_FILE" ]] || die "profile not found: $PROFILE_FILE" 2
+load_config() {
+  require_config_file
   # shellcheck disable=SC2034
-  COMFY_PROFILE="$(env_value_from COMFY_PROFILE "$PROFILE_FILE")"
-  COMFY_ENV_BACKEND="$(env_value_from COMFY_ENV_BACKEND "$PROFILE_FILE")"
-  COMFY_PYTHON_VERSION="$(env_value_from COMFY_PYTHON "$PROFILE_FILE")"
+  COMFY_PROFILE="$(required_config_value COMFY_PROFILE)"
+  COMFY_ENV_BACKEND="$(required_config_value COMFY_ENV_BACKEND)"
+  COMFY_PYTHON_VERSION="$(required_config_value COMFY_PYTHON)"
   # shellcheck disable=SC2034
-  COMFY_DEVICE="$(env_value_from COMFY_DEVICE "$PROFILE_FILE")"
-  COMFY_HOST="$(env_value_from COMFY_HOST "$PROFILE_FILE")"
-  COMFY_PORT="$(env_value_from COMFY_PORT "$PROFILE_FILE")"
-  COMFY_MODEL_ROOT="$(env_value_from COMFY_MODEL_ROOT "$PROFILE_FILE")"
-  COMFY_OUTPUT_ROOT="$(env_value_from COMFY_OUTPUT_ROOT "$PROFILE_FILE")"
-  TORCH_PRE_VALUE="$(env_value_from TORCH_PRE "$PROFILE_FILE")"
-  TORCH_INDEX_URL_VALUE="$(env_value_from TORCH_INDEX_URL "$PROFILE_FILE")"
-  HF_ENDPOINT_VALUE="$(env_value_from HF_ENDPOINT "$PROFILE_FILE")"
-  CUDA_VISIBLE_DEVICES_VALUE="$(env_value_from CUDA_VISIBLE_DEVICES "$PROFILE_FILE")"
-
-  COMFY_ENV_BACKEND="${COMFY_ENV_BACKEND:-uv}"
-  COMFY_PYTHON_VERSION="${COMFY_PYTHON_VERSION:-3.12}"
-  COMFY_HOST="${COMFY_HOST:-127.0.0.1}"
-  COMFY_PORT="${COMFY_PORT:-8188}"
-  COMFY_MODEL_ROOT="${COMFY_MODEL_ROOT:-./ComfyUI/models}"
-  COMFY_OUTPUT_ROOT="${COMFY_OUTPUT_ROOT:-./ComfyUI/output}"
+  COMFY_DEVICE="$(required_config_value COMFY_DEVICE)"
+  COMFY_HOST="$(required_config_value COMFY_HOST)"
+  COMFY_PORT="$(required_config_value COMFY_PORT)"
+  required_config_value COMFY_MODEL_ROOT >/dev/null
+  COMFY_OUTPUT_ROOT="$(required_config_value COMFY_OUTPUT_ROOT)"
+  TORCH_PRE_VALUE="$(config_value TORCH_PRE)"
+  TORCH_INDEX_URL_VALUE="$(config_value TORCH_INDEX_URL)"
+  HF_ENDPOINT_VALUE="$(config_value HF_ENDPOINT)"
+  CUDA_VISIBLE_DEVICES_VALUE="$(config_value CUDA_VISIBLE_DEVICES)"
 
   [[ "$COMFY_ENV_BACKEND" == "uv" ]] || die "only COMFY_ENV_BACKEND=uv is supported in this stage" 2
 }
@@ -356,7 +308,7 @@ require_uv() {
 }
 
 require_venv() {
-  [[ -x "$PYTHON_BIN" ]] || die "$PYTHON_BIN not found; run ./scripts/local.sh bootstrap --profile FILE" 2
+  [[ -x "$PYTHON_BIN" ]] || die "$PYTHON_BIN not found; run ./scripts/local.sh bootstrap" 2
 }
 
 require_manager() {
@@ -451,7 +403,7 @@ wait_for_url() {
 }
 
 bootstrap() {
-  load_profile
+  load_config
   require_uv
   [[ -d "$COMFY_DIR" ]] || die "ComfyUI submodule not found" 2
   mkdir -p "$RUN_DIR" "$LOG_DIR"
@@ -492,7 +444,7 @@ PY
 }
 
 start() {
-  load_profile
+  load_config
   require_venv
   require_manager
   require_loopback_host
@@ -568,7 +520,7 @@ start() {
 }
 
 stop() {
-  load_profile
+  load_config
   require_loopback_host
   section "Stop"
   local pid
@@ -610,7 +562,7 @@ stop() {
 }
 
 status() {
-  load_profile
+  load_config
   require_loopback_host
   section "Status"
   local pid
@@ -665,27 +617,27 @@ case "$command" in
   bootstrap)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage bootstrap; exit 0; fi
-    parse_required_profile_args bootstrap "$@"
+    parse_config_args bootstrap "$@"
     bootstrap
     ;;
   start)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage start; exit 0; fi
-    parse_required_profile_args start "$@"
+    parse_config_args start "$@"
     acquire_lifecycle_lock
     start
     ;;
   stop)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage stop; exit 0; fi
-    parse_required_profile_args stop "$@"
+    parse_config_args stop "$@"
     acquire_lifecycle_lock
     stop
     ;;
   restart)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage restart; exit 0; fi
-    parse_required_profile_args restart "$@"
+    parse_config_args restart "$@"
     acquire_lifecycle_lock
     stop
     start
@@ -693,7 +645,7 @@ case "$command" in
   status)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then command_usage status; exit 0; fi
-    parse_required_profile_args status "$@"
+    parse_config_args status "$@"
     status
     ;;
   logs)

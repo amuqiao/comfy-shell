@@ -3,7 +3,7 @@
 #
 # This is a read-only diagnostic script. It reports missing prerequisites and
 # mismatches for the ComfyUI shell project; it never installs, downloads, or
-# executes values from profile files.
+# executes values from config files.
 
 set -euo pipefail
 
@@ -17,25 +17,26 @@ usage() {
   ./scripts/check_env.sh -h|--help
 
 作用域:
-  检测 comfy-shell / ComfyUI 的本地或服务器运行环境。覆盖仓库结构、profile env、
+  检测 comfy-shell / ComfyUI 的本地或服务器运行环境。覆盖仓库结构、配置、
   Python/uv、macOS MPS、Linux CUDA、PyTorch、模型目录、端口和基础网络连通性。
 
 运行环境:
   Requires: Bash
   Optional: curl, git, uv, python3, lsof, nvidia-smi, nvcc, ffmpeg, tmux, conda
-  macOS 会探测 Apple Silicon / MPS; Linux CUDA profile 会探测 NVIDIA 驱动。
+  macOS 会探测 Apple Silicon / MPS; Linux CUDA 配置会探测 NVIDIA 驱动。
 
 不负责:
   不安装系统包,不创建 venv,不下载模型,不安装 custom_nodes,不启动 ComfyUI,
-  不 source .env 或执行 profile 文件中的任意内容,不支持 Docker 检查。
+  不 source .env 或执行配置文件中的任意内容,不支持 Docker 检查。
 
 配置:
-  --profile FILE      显式指定 profile env 文件。未指定时不读取 .env, 只做基础检查。
+  默认读取仓库根目录 .env。
+  --profile FILE      显式指定其他配置文件。
   --no-network        跳过 PyPI / GitHub / HuggingFace 只读 HEAD 连通性探测。
 
 默认行为:
-  未传 --profile 时, 不读取仓库根目录 .env。
-  仍输出系统、仓库和基础工具检查, profile 项显示 PENDING。
+  未传 --profile 时读取仓库根目录 .env。
+  进程环境变量优先于配置文件值。
   默认会对 PyPI / GitHub / HuggingFace 执行只读 HEAD 探测。
 
 输出:
@@ -43,22 +44,21 @@ usage() {
 
 成功标准:
   Exit Code 0 表示没有必要阻断项; 输出中仍可能包含 WARN/PENDING。
-  Exit Code 1 表示存在必要项缺失, 或 profile 明确要求的设备不匹配。
+  Exit Code 1 表示存在必要项缺失, 或配置明确要求的设备不匹配。
 
 副作用与保护边界:
   只读脚本, 不写文件, 不安装依赖, 不下载模型, 不启动进程。
   网络检查只使用 HEAD 探测; 使用 --no-network 可完全跳过。
-  profile 只按白名单键解析, 不执行其中内容。
+  配置文件只按白名单键解析, 不执行其中内容。
 
 常用示例:
   ./scripts/check_env.sh
   ./scripts/check_env.sh --no-network
-  ./scripts/check_env.sh --profile .env
   ./scripts/check_env.sh --profile configs/profiles/macos-mps.env.example
 
 Exit Codes:
   0  必要基础项就绪,可能仍有 WARN/PENDING。
-  1  存在必要项缺失或 profile 明确要求的设备不匹配。
+  1  存在必要项缺失或配置明确要求的设备不匹配。
   2  参数错误。
 EOF
 }
@@ -169,10 +169,16 @@ env_value_from() {
   ' "$file"
 }
 
-profile_value() {
+config_value() {
   local key="$1"
-  if [[ -n "$PROFILE_FILE" && -f "$PROFILE_FILE" ]]; then
-    env_value_from "$key" "$PROFILE_FILE"
+  local decl
+  decl="$(declare -p "$key" 2>/dev/null || true)"
+  if [[ "$decl" =~ ^declare\ -[^[:space:]]*x[^[:space:]]*\ $key(=|$) ]]; then
+    printf '%s' "${!key}"
+    return
+  fi
+  if [[ -f "$CONFIG_FILE" ]]; then
+    env_value_from "$key" "$CONFIG_FILE"
   fi
 }
 
@@ -236,66 +242,66 @@ import sys
 raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
 PY
   then
-    note_warn "python3-version" "系统 python3 低于 3.10; 使用 uv 创建 COMFY_PYTHON=${COMFY_PYTHON:-3.12} 的 .venv 即可"
+    note_warn "python3-version" "系统 python3 低于 3.10; 使用配置中的 COMFY_PYTHON 创建 .venv"
   fi
 }
 
-check_profile() {
-  section "PROFILE"
-  if [[ -z "$PROFILE_FILE" ]]; then
-    event "PENDING" "profile" "no --profile; .env is not read implicitly"
-    kv "推荐 macOS profile" "configs/profiles/macos-mps.env.example"
-    kv "推荐 server profile" "configs/profiles/server-cuda-a10.env.example"
-    return
-  fi
-  if [[ ! -f "$PROFILE_FILE" ]]; then
-    event "MISSING" "profile" "$PROFILE_FILE"
-    note_missing "profile" "指定的 profile 文件不存在: $PROFILE_FILE"
+check_config() {
+  section "CONFIG"
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    event "MISSING" "config" "$CONFIG_FILE"
+    note_missing "config" "配置文件不存在: $CONFIG_FILE"
     return
   fi
 
-  event "OK" "profile" "$PROFILE_FILE"
-  COMFY_PROFILE="$(profile_value COMFY_PROFILE)"
-  COMFY_ENV_BACKEND="$(profile_value COMFY_ENV_BACKEND)"
-  COMFY_PYTHON="$(profile_value COMFY_PYTHON)"
-  COMFY_DEVICE="$(profile_value COMFY_DEVICE)"
-  COMFY_HOST="$(profile_value COMFY_HOST)"
-  COMFY_PORT="$(profile_value COMFY_PORT)"
-  COMFY_MODEL_ROOT="$(profile_value COMFY_MODEL_ROOT)"
-  COMFY_OUTPUT_ROOT="$(profile_value COMFY_OUTPUT_ROOT)"
-  CUDA_VISIBLE_DEVICES_VALUE="$(profile_value CUDA_VISIBLE_DEVICES)"
-  TORCH_PRE_VALUE="$(profile_value TORCH_PRE)"
-  TORCH_INDEX_URL_VALUE="$(profile_value TORCH_INDEX_URL)"
-  HF_ENDPOINT_VALUE="$(profile_value HF_ENDPOINT)"
+  event "OK" "config" "$CONFIG_FILE"
+  COMFY_PROFILE="$(config_value COMFY_PROFILE)"
+  COMFY_ENV_BACKEND="$(config_value COMFY_ENV_BACKEND)"
+  COMFY_PYTHON="$(config_value COMFY_PYTHON)"
+  COMFY_DEVICE="$(config_value COMFY_DEVICE)"
+  COMFY_HOST="$(config_value COMFY_HOST)"
+  COMFY_PORT="$(config_value COMFY_PORT)"
+  COMFY_MODEL_ROOT="$(config_value COMFY_MODEL_ROOT)"
+  COMFY_OUTPUT_ROOT="$(config_value COMFY_OUTPUT_ROOT)"
+  CUDA_VISIBLE_DEVICES_VALUE="$(config_value CUDA_VISIBLE_DEVICES)"
+  TORCH_PRE_VALUE="$(config_value TORCH_PRE)"
+  TORCH_INDEX_URL_VALUE="$(config_value TORCH_INDEX_URL)"
+  HF_ENDPOINT_VALUE="$(config_value HF_ENDPOINT)"
 
   kv "COMFY_PROFILE" "${COMFY_PROFILE:-MISSING}"
   kv "COMFY_ENV_BACKEND" "${COMFY_ENV_BACKEND:-MISSING}"
   kv "COMFY_PYTHON" "${COMFY_PYTHON:-MISSING}"
   kv "COMFY_DEVICE" "${COMFY_DEVICE:-MISSING}"
-  kv "COMFY_HOST" "${COMFY_HOST:-127.0.0.1(default)}"
-  kv "COMFY_PORT" "${COMFY_PORT:-8188(default)}"
+  kv "COMFY_HOST" "${COMFY_HOST:-MISSING}"
+  kv "COMFY_PORT" "${COMFY_PORT:-MISSING}"
   kv "CUDA_VISIBLE_DEVICES" "${CUDA_VISIBLE_DEVICES_VALUE:-}"
   kv "TORCH_PRE" "${TORCH_PRE_VALUE:-}"
   kv "TORCH_INDEX_URL" "${TORCH_INDEX_URL_VALUE:-}"
   kv "HF_ENDPOINT" "${HF_ENDPOINT_VALUE:-}"
 
-  [[ -n "$COMFY_PROFILE" ]] || note_missing "COMFY_PROFILE" "profile 应声明 COMFY_PROFILE"
+  [[ -n "$COMFY_PROFILE" ]] || note_missing "COMFY_PROFILE" "配置应声明 COMFY_PROFILE"
+  [[ -n "$COMFY_PYTHON" ]] || note_missing "COMFY_PYTHON" "配置应声明 COMFY_PYTHON"
+  [[ -n "$COMFY_HOST" ]] || note_missing "COMFY_HOST" "配置应声明 COMFY_HOST"
+  [[ -n "$COMFY_PORT" ]] || note_missing "COMFY_PORT" "配置应声明 COMFY_PORT"
+  [[ -n "$COMFY_MODEL_ROOT" ]] || note_missing "COMFY_MODEL_ROOT" "配置应声明 COMFY_MODEL_ROOT"
+  [[ -n "$COMFY_OUTPUT_ROOT" ]] || note_missing "COMFY_OUTPUT_ROOT" "配置应声明 COMFY_OUTPUT_ROOT"
   case "${COMFY_ENV_BACKEND:-}" in
     uv) ;;
-    conda) note_warn "COMFY_ENV_BACKEND" "conda 仅作为兼容路径; 主线建议 uv" ;;
-    "") note_missing "COMFY_ENV_BACKEND" "profile 应声明 COMFY_ENV_BACKEND=uv" ;;
+    conda) note_warn "COMFY_ENV_BACKEND" "conda 不是当前主线; 建议使用 uv" ;;
+    "") note_missing "COMFY_ENV_BACKEND" "配置应声明 COMFY_ENV_BACKEND=uv" ;;
     *) note_missing "COMFY_ENV_BACKEND" "仅支持 uv 或 conda: ${COMFY_ENV_BACKEND}" ;;
   esac
   case "${COMFY_DEVICE:-}" in
     mps|cuda|cpu) ;;
-    "") note_missing "COMFY_DEVICE" "profile 应声明 COMFY_DEVICE=mps|cuda|cpu" ;;
+    "") note_missing "COMFY_DEVICE" "配置应声明 COMFY_DEVICE=mps|cuda|cpu" ;;
     *) note_missing "COMFY_DEVICE" "未知 COMFY_DEVICE: ${COMFY_DEVICE}" ;;
   esac
   if [[ -n "${COMFY_PORT:-}" ]] && ! is_int "$COMFY_PORT"; then
     note_missing "COMFY_PORT" "COMFY_PORT 必须是数字: $COMFY_PORT"
   fi
-  case "${COMFY_HOST:-127.0.0.1}" in
+  case "${COMFY_HOST:-}" in
     127.0.0.1|localhost|::1) ;;
+    "") ;;
     *) note_missing "COMFY_HOST" "本阶段只允许本机 loopback host: ${COMFY_HOST}" ;;
   esac
 }
@@ -405,13 +411,13 @@ check_acceleration() {
         event "OK" "mps-host" "macOS Apple Silicon"
       else
         event "MISSING" "mps-host" "COMFY_DEVICE=mps requires Apple Silicon macOS"
-        note_missing "mps-host" "mps profile 只能用于 Apple Silicon macOS"
+        note_missing "mps-host" "mps 配置只能用于 Apple Silicon macOS"
       fi
       ;;
     cuda)
       if [[ "$os_kind" != "linux" ]]; then
         event "MISSING" "cuda-host" "COMFY_DEVICE=cuda expects Linux NVIDIA host"
-        note_missing "cuda-host" "cuda profile 应用于 Linux NVIDIA 服务器"
+        note_missing "cuda-host" "cuda 配置应用于 Linux NVIDIA 服务器"
       fi
       if command_exists nvidia-smi; then
         info_command_version "nvidia-smi" nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
@@ -420,7 +426,7 @@ check_acceleration() {
         kv "Driver CUDA max" "${driver_cuda:-UNKNOWN}"
       else
         event "MISSING" "nvidia-smi" "not found"
-        note_missing "nvidia-smi" "CUDA profile 需要 NVIDIA 驱动和 nvidia-smi"
+        note_missing "nvidia-smi" "CUDA 配置需要 NVIDIA 驱动和 nvidia-smi"
       fi
       info_command_version "nvcc (optional)" nvcc --version
       ;;
@@ -444,7 +450,7 @@ check_python_runtime() {
   if [[ -z "$runtime_python" && -x "$COMFY_DIR/venv/bin/python" ]]; then
     runtime_python="$COMFY_DIR/venv/bin/python"
     event "WARN" "ComfyUI/venv" "$runtime_python"
-    note_warn "venv-location" "检测到 ComfyUI/venv, 但壳脚本只使用仓库根目录 .venv; 请运行 ./scripts/local.sh bootstrap --profile FILE"
+    note_warn "venv-location" "检测到 ComfyUI/venv, 但壳脚本只使用仓库根目录 .venv; 请运行 ./scripts/local.sh bootstrap"
   fi
   [[ -n "$runtime_python" ]] || runtime_python="$(command -v python3 2>/dev/null || true)"
   if [[ -z "$runtime_python" ]]; then
@@ -533,8 +539,12 @@ PY
 
 check_paths_and_port() {
   section "PATHS / PORT"
-  local model_root="${COMFY_MODEL_ROOT:-./ComfyUI/models}"
-  local output_root="${COMFY_OUTPUT_ROOT:-./ComfyUI/output}"
+  local model_root="${COMFY_MODEL_ROOT:-}"
+  local output_root="${COMFY_OUTPUT_ROOT:-}"
+  if [[ -z "$model_root" || -z "$output_root" ]]; then
+    event "SKIP" "paths" "COMFY_MODEL_ROOT or COMFY_OUTPUT_ROOT missing"
+    return
+  fi
   local model_abs
   local output_abs
   model_abs="$(resolve_path "$model_root")"
@@ -593,8 +603,12 @@ check_paths_and_port() {
     fi
   done
 
-  local host="${COMFY_HOST:-127.0.0.1}"
-  local port="${COMFY_PORT:-8188}"
+  local host="${COMFY_HOST:-}"
+  local port="${COMFY_PORT:-}"
+  if [[ -z "$host" || -z "$port" ]]; then
+    event "SKIP" "port" "COMFY_HOST or COMFY_PORT missing"
+    return
+  fi
   kv "ComfyUI URL" "http://${host}:${port}"
   if command_exists lsof; then
     local owner
@@ -654,17 +668,17 @@ print_result() {
   return 1
 }
 
-PROFILE_FILE=""
+CONFIG_FILE="$ROOT_DIR/.env"
 NO_NETWORK=0
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --profile)
       [[ "$#" -ge 2 ]] || die_usage "--profile requires a file"
-      PROFILE_FILE="$(resolve_path "$2")"
+      CONFIG_FILE="$(resolve_path "$2")"
       shift 2
       ;;
     --profile=*)
-      PROFILE_FILE="$(resolve_path "${1#--profile=}")"
+      CONFIG_FILE="$(resolve_path "${1#--profile=}")"
       shift
       ;;
     --no-network)
@@ -682,20 +696,8 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 OS_KIND="$(detect_os)"
-COMFY_PROFILE=""
-COMFY_ENV_BACKEND=""
-COMFY_PYTHON=""
-COMFY_DEVICE=""
-COMFY_HOST=""
-COMFY_PORT=""
-COMFY_MODEL_ROOT=""
-COMFY_OUTPUT_ROOT=""
-CUDA_VISIBLE_DEVICES_VALUE=""
-TORCH_INDEX_URL_VALUE=""
-TORCH_PRE_VALUE=""
-HF_ENDPOINT_VALUE=""
 
-check_profile
+check_config
 check_system "$OS_KIND"
 check_repo
 check_tools

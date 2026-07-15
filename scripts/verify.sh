@@ -23,7 +23,7 @@ check 会执行:
   2. 可用时执行 shellcheck
   3. Python helper 语法检查
   4. scripts 入口和子命令 help smoke
-  5. 显式 profile / 显式 remote 参数合同 smoke
+  5. 默认 .env / 显式 --profile / 显式 remote 参数合同 smoke
   6. git diff --check
 
 输出:
@@ -90,7 +90,6 @@ section "Python Syntax"
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/comfy-shell-pycache" python3 -m py_compile "${ROOT_DIR}/scripts/lib/remote_gpu_format.py"
 
 section "Help Smoke"
-"${ROOT_DIR}/scripts/env.sh" -h >/dev/null
 "${ROOT_DIR}/scripts/check_env.sh" -h >/dev/null
 "${ROOT_DIR}/scripts/local.sh" -h >/dev/null
 "${ROOT_DIR}/scripts/nodes.sh" -h >/dev/null
@@ -109,19 +108,16 @@ for subcmd in sync bootstrap start stop restart status logs ready tunnel gpu; do
 done
 
 section "Read-only Smoke"
-"${ROOT_DIR}/scripts/env.sh" profiles >/dev/null
-"${ROOT_DIR}/scripts/check_env.sh" --no-network >/dev/null
-"${ROOT_DIR}/scripts/check_env.sh" --profile configs/profiles/macos-mps.env.example --no-network >/dev/null
+COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --no-network >/dev/null
+COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile configs/profiles/macos-mps.env.example --no-network >/dev/null
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
+"${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core >/dev/null
 "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example >/dev/null
 "${ROOT_DIR}/scripts/remote.sh" tunnel --host wangqiao@47.94.108.140 --local-port 18188 --remote-port 8188 --dry-run >/dev/null
-expect_status 2 "${ROOT_DIR}/scripts/local.sh" status
+expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --unknown
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile .env
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile configs/profiles/macos-mps.env.example
 if printf '' | python3 "${ROOT_DIR}/scripts/lib/remote_gpu_format.py" --host smoke --json >/dev/null 2>&1; then
   die "remote_gpu_format.py accepted an empty snapshot" 1
 fi

@@ -17,11 +17,11 @@ usage() {
   cat <<'EOF'
 用法:
   ./scripts/remote.sh sync --host USER@HOST --dir REMOTE_DIR --yes [options]
-  ./scripts/remote.sh bootstrap --host USER@HOST --dir REMOTE_DIR --profile PROFILE --yes [options]
-  ./scripts/remote.sh start --host USER@HOST --dir REMOTE_DIR --profile PROFILE --yes
-  ./scripts/remote.sh stop --host USER@HOST --dir REMOTE_DIR --profile PROFILE --yes
-  ./scripts/remote.sh restart --host USER@HOST --dir REMOTE_DIR --profile PROFILE --yes
-  ./scripts/remote.sh status --host USER@HOST --dir REMOTE_DIR --profile PROFILE
+  ./scripts/remote.sh bootstrap --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE] [options]
+  ./scripts/remote.sh start --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
+  ./scripts/remote.sh stop --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
+  ./scripts/remote.sh restart --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
+  ./scripts/remote.sh status --host USER@HOST --dir REMOTE_DIR [--profile FILE]
   ./scripts/remote.sh logs --host USER@HOST --dir REMOTE_DIR [--tail N|all] [--follow]
   ./scripts/remote.sh ready --host USER@HOST [--url URL]
   ./scripts/remote.sh tunnel --host USER@HOST [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run]
@@ -39,8 +39,9 @@ usage() {
 
 配置来源:
   显式 CLI 参数是唯一稳定入口: --host、--dir、--profile、--url、--local-port、--remote-port。
-  本脚本不隐式补齐 host、dir、profile 或端口。
-  --profile 是远端 checkout 内的 profile 文件路径, 由远端 local.sh 按白名单 key 解析。
+  本脚本不隐式补齐 host、dir 或端口。
+  未传 --profile 时, 远端 local.sh 默认读取远端 checkout 根目录 .env。
+  传 --profile FILE 时, FILE 是远端 checkout 内的显式配置文件路径。
 
 副作用与保护边界:
   sync/bootstrap/start/stop/restart 必须显式传 --yes。
@@ -56,9 +57,9 @@ usage() {
 
 常用示例:
   ./scripts/remote.sh sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-  ./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example --yes
-  ./scripts/remote.sh start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example --yes
-  ./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example
+  ./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+  ./scripts/remote.sh start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+  ./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
   ./scripts/remote.sh logs --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --tail 200
   ./scripts/remote.sh tunnel --host wangqiao@47.94.108.140 --local-port 8188 --remote-port 8188
   ./scripts/remote.sh gpu --host wangqiao@47.94.108.140
@@ -96,23 +97,23 @@ EOF
 usage_bootstrap() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh bootstrap --host USER@HOST --dir REMOTE_DIR --profile PROFILE --yes [options]
+  ./scripts/remote.sh bootstrap --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE] [options]
 
 必需参数:
   --host USER@HOST       SSH 目标。
   --dir REMOTE_DIR       远端 checkout 绝对路径。
-  --profile PROFILE      远端 checkout 内的 profile 文件路径。
   --yes                  确认执行写操作。
 
 选项:
+  --profile FILE         远端 checkout 内的显式配置文件路径; 未传时读取远端 .env。
   --uv-index-url URL     为远端 local.sh bootstrap 注入 UV_INDEX_URL。
   -h, --help             显示本帮助。
 
 远端动作:
-  cd REMOTE_DIR && ./scripts/local.sh bootstrap --profile PROFILE
+  cd REMOTE_DIR && ./scripts/local.sh bootstrap
 
 示例:
-  ./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --profile configs/profiles/server-cuda-a10.env.example --yes
+  ./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
 EOF
 }
 
@@ -120,37 +121,37 @@ usage_lifecycle() {
   local action="${1:-${cmd:-start}}"
   cat <<EOF
 用法:
-  ./scripts/remote.sh ${action} --host USER@HOST --dir REMOTE_DIR --profile PROFILE --yes
+  ./scripts/remote.sh ${action} --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
 
 必需参数:
   --host USER@HOST       SSH 目标。
   --dir REMOTE_DIR       远端 checkout 绝对路径。
-  --profile PROFILE      远端 checkout 内的 profile 文件路径。
   --yes                  确认执行写操作。
 
 选项:
+  --profile FILE         远端 checkout 内的显式配置文件路径; 未传时读取远端 .env。
   -h, --help             显示本帮助。
 
 远端动作:
-  cd REMOTE_DIR && ./scripts/local.sh ${action} --profile PROFILE
+  cd REMOTE_DIR && ./scripts/local.sh ${action}
 EOF
 }
 
 usage_status() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh status --host USER@HOST --dir REMOTE_DIR --profile PROFILE
+  ./scripts/remote.sh status --host USER@HOST --dir REMOTE_DIR [--profile FILE]
 
 必需参数:
   --host USER@HOST       SSH 目标。
   --dir REMOTE_DIR       远端 checkout 绝对路径。
-  --profile PROFILE      远端 checkout 内的 profile 文件路径。
 
 选项:
+  --profile FILE         远端 checkout 内的显式配置文件路径; 未传时读取远端 .env。
   -h, --help             显示本帮助。
 
 远端动作:
-  cd REMOTE_DIR && ./scripts/local.sh status --profile PROFILE
+  cd REMOTE_DIR && ./scripts/local.sh status
 EOF
 }
 
@@ -490,16 +491,21 @@ case "$cmd" in
       esac
     done
     require_host_dir
-    [[ -n "$profile" ]] || usage_error "--profile is required" usage_bootstrap
-    validate_profile_arg "$profile"
+    if [[ -n "$profile" ]]; then
+      validate_profile_arg "$profile"
+    fi
     require_yes "$yes"
     if [[ -n "$uv_index_url" ]]; then
       validate_url "$uv_index_url"
     fi
     require_cmd ssh
-    bootstrap_remote_action="cd $remote_dir && ./scripts/local.sh bootstrap --profile $profile"
+    bootstrap_args=(./scripts/local.sh bootstrap)
+    if [[ -n "$profile" ]]; then
+      bootstrap_args+=(--profile "$profile")
+    fi
+    bootstrap_remote_action="cd $remote_dir && $(quote_cmd "${bootstrap_args[@]}")"
     if [[ -n "$uv_index_url" ]]; then
-      bootstrap_remote_action="cd $remote_dir && UV_INDEX_URL=$uv_index_url ./scripts/local.sh bootstrap --profile $profile"
+      bootstrap_remote_action="cd $remote_dir && UV_INDEX_URL=$uv_index_url $(quote_cmd "${bootstrap_args[@]}")"
     fi
     print_remote_plan \
       "bootstrap" \
@@ -509,11 +515,11 @@ case "$cmd" in
       "" \
       "$bootstrap_remote_action"
     if [[ -n "$uv_index_url" ]]; then
-      remote_command="$(remote_cd_cmd "$remote_dir" env "UV_INDEX_URL=$uv_index_url" ./scripts/local.sh bootstrap --profile "$profile")"
+      remote_command="$(remote_cd_cmd "$remote_dir" env "UV_INDEX_URL=$uv_index_url" "${bootstrap_args[@]}")"
       ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
       exec "${ssh_args[@]}"
     fi
-    remote_command="$(remote_cd_cmd "$remote_dir" ./scripts/local.sh bootstrap --profile "$profile")"
+    remote_command="$(remote_cd_cmd "$remote_dir" "${bootstrap_args[@]}")"
     ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
     exec "${ssh_args[@]}"
     ;;
@@ -544,18 +550,23 @@ case "$cmd" in
       esac
     done
     require_host_dir
-    [[ -n "$profile" ]] || usage_error "--profile is required" usage_lifecycle
-    validate_profile_arg "$profile"
+    if [[ -n "$profile" ]]; then
+      validate_profile_arg "$profile"
+    fi
     require_yes "$yes"
     require_cmd ssh
+    lifecycle_args=(./scripts/local.sh "$cmd")
+    if [[ -n "$profile" ]]; then
+      lifecycle_args+=(--profile "$profile")
+    fi
     print_remote_plan \
       "$cmd" \
       "$host" \
       "$remote_dir" \
       "$profile" \
       "" \
-      "cd $remote_dir && ./scripts/local.sh $cmd --profile $profile"
-    remote_command="$(remote_cd_cmd "$remote_dir" ./scripts/local.sh "$cmd" --profile "$profile")"
+      "cd $remote_dir && $(quote_cmd "${lifecycle_args[@]}")"
+    remote_command="$(remote_cd_cmd "$remote_dir" "${lifecycle_args[@]}")"
     ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
     exec "${ssh_args[@]}"
     ;;
@@ -581,10 +592,15 @@ case "$cmd" in
       esac
     done
     require_host_dir
-    [[ -n "$profile" ]] || usage_error "--profile is required" usage_status
-    validate_profile_arg "$profile"
+    if [[ -n "$profile" ]]; then
+      validate_profile_arg "$profile"
+    fi
     require_cmd ssh
-    remote_command="$(remote_cd_cmd "$remote_dir" ./scripts/local.sh status --profile "$profile")"
+    status_args=(./scripts/local.sh status)
+    if [[ -n "$profile" ]]; then
+      status_args+=(--profile "$profile")
+    fi
+    remote_command="$(remote_cd_cmd "$remote_dir" "${status_args[@]}")"
     ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
     exec "${ssh_args[@]}"
     ;;

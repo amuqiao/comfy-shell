@@ -177,9 +177,9 @@ heroine-i2v-core
 如果这是第一次在本机运行 comfy-shell：
 
 ```bash
-./scripts/env.sh use macos-mps
-./scripts/check_env.sh --profile .env --no-network
-./scripts/local.sh bootstrap --profile .env
+cp configs/profiles/macos-mps.env.example .env
+./scripts/check_env.sh --no-network
+./scripts/local.sh bootstrap
 ```
 
 准备本次实验目录：
@@ -191,8 +191,8 @@ mkdir -p assets/heroine/inputs assets/heroine/references assets/heroine/identity
 启动 ComfyUI：
 
 ```bash
-./scripts/local.sh start --profile .env
-./scripts/local.sh status --profile .env
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 浏览器打开：

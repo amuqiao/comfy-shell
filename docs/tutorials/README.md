@@ -73,19 +73,19 @@
 如果是第一次在这台机器运行，按根 [README](../../README.md) 的本机启动流程先准备环境：
 
 ```bash
-./scripts/env.sh use macos-mps
-./scripts/check_env.sh --profile .env --no-network
-./scripts/local.sh bootstrap --profile .env
-./scripts/local.sh start --profile .env
-./scripts/local.sh status --profile .env
+cp configs/profiles/macos-mps.env.example .env
+./scripts/check_env.sh --no-network
+./scripts/local.sh bootstrap
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 如果已经 bootstrap 过，日常只需要：
 
 ```bash
 ./scripts/nodes.sh status
-./scripts/local.sh start --profile .env
-./scripts/local.sh status --profile .env
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 第一次实验前准备目录：

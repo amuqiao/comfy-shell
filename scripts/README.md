@@ -7,7 +7,6 @@
 `scripts/` 是 `comfy-shell` 的稳定操作入口。壳项目只管理 ComfyUI 外层运行流程，不把 ComfyUI 上游源码、模型文件或第三方节点代码混进主仓库。
 
 ```text
-env.sh                  profile 激活与查看
 check_env.sh            只读环境体检
 local.sh                  本机 ComfyUI 环境准备和进程生命周期
 nodes.sh                ComfyUI-Manager 依赖状态和安装
@@ -24,12 +23,12 @@ verify.sh               scripts 最小可重复校验
 Shell 入口默认只负责：
 
 - 定位仓库根目录和运行时路径。
-- 解析显式 `--profile FILE` 中的白名单配置键。
+- 读取仓库根目录 `.env` 中的白名单配置键；显式 `--profile FILE` 只用于单次指定其他配置文件。
 - 做轻量参数分发。
 - 提供稳定、可读、可复制的 help。
 - 调用 `uv`、Python 或 ComfyUI 入口完成明确动作。
 
-不要在脚本中 `source .env`、`eval` profile 内容，或透传自由 shell 片段。profile 是数据，不是脚本。
+不要在脚本中 `source .env`、`eval` 配置文件内容，或透传自由 shell 片段。配置文件是数据，不是脚本。
 
 ## Help 分层
 
@@ -53,30 +52,29 @@ Shell 入口默认只负责：
 
 ## 配置边界
 
-profile 文件是被命令显式点名的数据文件。脚本不得默认读取仓库根目录 `.env`。
-`.env` 只是本地可选快捷文件，可由 `./scripts/env.sh use <profile>` 生成；需要使用时必须在命令里写 `--profile .env`。`.env` 不提交。
+仓库根目录 `.env` 是默认配置文件。脚本默认读取 `.env`，但不 `source` 或执行其中内容。
+如需临时读取其他配置文件，必须在命令中显式写 `--profile FILE`。`.env` 不提交。
 
 配置读取规则：
 
 ```text
-脚本显式支持的 CLI 参数 / 进程环境变量
-> 显式 --profile FILE 中的白名单 profile 键
-> 脚本默认值
+脚本显式支持的 CLI 参数
+> 进程环境变量
+> .env 或显式 --profile FILE 中的白名单配置键
 ```
 
-不要把任意 profile 键都假设为可用命令前缀覆盖。比如当前 `local.sh bootstrap`
-从显式 `--profile FILE` 读取 `TORCH_INDEX_URL`，不会读取命令前缀里的
-`TORCH_INDEX_URL=...`。如果未来需要这种覆盖方式，先改实现，再改 help 示例。
+不要把任意配置键都当作自由 shell 片段执行。只允许脚本白名单读取的键生效。
+同名进程环境变量优先于配置文件值，适合临时覆盖。
 
 常见配置：
 
 ```text
-COMFY_PROFILE          当前 profile 名
+COMFY_PROFILE          当前配置名
 COMFY_ENV_BACKEND      当前阶段只支持 uv
 COMFY_PYTHON           uv 创建 .venv 使用的 Python 版本
 COMFY_DEVICE           mps / cuda / cpu
 COMFY_HOST             本机开发阶段只允许 127.0.0.1 / localhost / ::1
-COMFY_PORT             默认 8188
+COMFY_PORT             ComfyUI 监听端口
 TORCH_PRE              true 时安装 PyTorch 使用 --pre
 TORCH_INDEX_URL        PyTorch 专用 wheel 源
 UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
@@ -86,17 +84,17 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 
 帮助文档里的源配置示例按这个规则写：
 
-- `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap --profile .env`
+- `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap`
   可以作为命令前缀示例，因为它由 `uv` 自己读取。
-- `TORCH_INDEX_URL` 只作为 profile / `.env` 示例展示，不写成命令前缀，除非脚本实现已支持进程环境覆盖。
+- `TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124 ./scripts/local.sh bootstrap`
+  可以作为一次性覆盖示例，因为脚本实现会优先读取同名进程环境变量。
 
 ## 副作用边界
 
-- `env.sh use` 会写 `.env`。
-- `check_env.sh --profile FILE` 只读，不安装、不下载、不启动；未传 profile 时只做基础检查。
-- `local.sh bootstrap --profile FILE` 会创建或复用 `.venv`，创建 `.run/` 和 `logs/`，并安装 Python 依赖。
-- `local.sh start --profile FILE` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
-- `local.sh stop --profile FILE` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
+- `check_env.sh` 只读，不安装、不下载、不启动；默认读取 `.env`。
+- `local.sh bootstrap` 会创建或复用 `.venv`，创建 `.run/` 和 `logs/`，并安装 Python 依赖。
+- `local.sh start` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
+- `local.sh stop` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
 - `nodes.sh install manager` 会安装 `ComfyUI/manager_requirements.txt` 到 `.venv`。
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；`remote.sh status/ready/logs` 只读查看远端状态。
@@ -114,7 +112,6 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 
 ```bash
 bash -n scripts/*.sh
-./scripts/env.sh -h
 ./scripts/check_env.sh -h
 ./scripts/local.sh -h
 ./scripts/nodes.sh -h
@@ -128,9 +125,9 @@ git diff --check
 修改 `local.sh` 的启动、停止、PID 或端口逻辑后，还需要用户显式执行真实启动验证：
 
 ```bash
-./scripts/local.sh start --profile .env
-./scripts/local.sh status --profile .env
-./scripts/local.sh stop --profile .env
+./scripts/local.sh start
+./scripts/local.sh status
+./scripts/local.sh stop
 ```
 
 ## 新增脚本 Checklist
@@ -139,7 +136,7 @@ git diff --check
 - 文件名是否稳定、可预测，并使用 `.sh`。
 - `-h` 是否说明作用域、不负责什么、命令、配置、输出、副作用、示例和退出码。
 - 是否避免 silent fallback；配置错误应快速失败。
-- 是否避免隐式读取 `.env`；需要 profile 时是否用显式 `--profile FILE`。
-- 是否避免执行 `.env` 或 profile 内容。
+- 是否默认读取 `.env`，且只有显式 `--profile FILE` 时才读取其他配置文件。
+- 是否避免执行 `.env` 或其他配置文件内容。
 - 是否明确哪些命令会访问网络、安装依赖、写文件或启动进程。
 - 是否完成最小验证。
