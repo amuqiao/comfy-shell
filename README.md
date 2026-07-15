@@ -147,17 +147,16 @@ For the fixed development server, use the shortcut entry from your local
 checkout:
 
 ```bash
-./scripts/remote-dev.sh sync --yes
-./scripts/remote-dev.sh bootstrap --yes
-./scripts/remote-dev.sh start --yes
-./scripts/remote-dev.sh status
-./scripts/remote-dev.sh tunnel
+./scripts/remote.sh sync --target dev --yes
+./scripts/remote.sh bootstrap --target dev --yes
+./scripts/remote.sh start --target dev --yes
+./scripts/remote.sh status --target dev
+./scripts/remote.sh tunnel --target dev
 ```
 
-`remote-dev.sh` keeps the current project target in one place and delegates the
-real work to reusable entries: `remote.sh` for SSH orchestration and
-`remote-gpu.sh` for read-only GPU status. Use `remote.sh` directly when the
-host or remote checkout directory is different.
+`--target dev` reads `configs/remotes/dev.env.example`. Use explicit
+`--host` / `--dir` when the host or remote checkout directory is different.
+GPU diagnostics are available through `./scripts/remote.sh gpu --target dev`.
 
 ## Business Tutorial
 

@@ -96,12 +96,16 @@ def _build_process(row: list[str], gpu_index_by_uuid: dict[str, Any]) -> dict[st
 def parse_snapshot(text: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     sections: dict[str, list[str]] = {"gpu": [], "processes": []}
     current: Optional[str] = None
+    seen_gpu_marker = False
+    seen_process_marker = False
 
     for line in text.splitlines():
         if line == GPU_SECTION_MARKER:
+            seen_gpu_marker = True
             current = "gpu"
             continue
         if line == PROCESS_SECTION_MARKER:
+            seen_process_marker = True
             current = "processes"
             continue
         if current is None:
@@ -109,6 +113,9 @@ def parse_snapshot(text: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]
                 raise ValueError(f"unexpected snapshot line before section marker: {line}")
             continue
         sections[current].append(line)
+
+    if not seen_gpu_marker or not seen_process_marker:
+        raise ValueError("missing nvidia-smi snapshot section marker")
 
     gpus = [_build_gpu(row) for row in _parse_csv_rows("\n".join(sections["gpu"]))]
     gpu_index_by_uuid = {str(gpu["uuid"]): gpu["index"] for gpu in gpus}

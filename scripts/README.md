@@ -12,10 +12,7 @@ check_env.sh            只读环境体检
 dev.sh                  本机 ComfyUI 环境准备和进程生命周期
 nodes.sh                ComfyUI-Manager 依赖状态和安装
 models.sh               可选模型清单查看和显式下载
-tunnel.sh               本机到远程服务器 ComfyUI 的 SSH 端口转发
-remote.sh               可复用 SSH 远端项目 checkout 编排
-remote-gpu.sh           只读查询远端 GPU 状态
-remote-dev.sh           固定远程开发服务器快捷入口
+remote.sh               远端项目 checkout 编排、隧道和 GPU 诊断
 verify.sh               scripts 最小可重复校验
 create-shell-submodule.sh  壳仓库脚手架
 ```
@@ -100,12 +97,10 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 - `dev.sh start` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
 - `dev.sh stop` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
 - `nodes.sh install manager` 会安装 `ComfyUI/manager_requirements.txt` 到 `.venv`。
-- `tunnel.sh` 会在当前终端打开 SSH 本地端口转发，不启动远程服务，不写文件。
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；`remote.sh status/ready/logs` 只读查看远端状态。
-- `remote-gpu.sh status` 只读查询远端 `nvidia-smi`，不会管理进程或文件。
-- `remote-dev.sh` 只保存当前项目固定远程开发服务器参数，实际动作委托给
-  `remote.sh` 和 `remote-gpu.sh`。
+- `remote.sh gpu` 只读查询远端 `nvidia-smi`，不会管理进程或文件。
+- `remote.sh tunnel` 会在当前终端打开 SSH 本地端口转发，不启动远程服务，不写文件。
 
 安装、下载、启动都必须由用户显式执行对应命令；不要在只读命令里顺手修复环境。
 `dev.sh start` 默认启用上游 ComfyUI-Manager；壳脚本本身不会在启动时执行
@@ -122,10 +117,7 @@ bash -n scripts/*.sh
 ./scripts/check_env.sh -h
 ./scripts/dev.sh -h
 ./scripts/nodes.sh -h
-./scripts/tunnel.sh -h
 ./scripts/remote.sh -h
-./scripts/remote-gpu.sh -h
-./scripts/remote-dev.sh -h
 ./scripts/verify.sh -h
 git diff --check
 ```

@@ -79,14 +79,16 @@ section "Help Smoke"
 "${ROOT_DIR}/scripts/dev.sh" -h >/dev/null
 "${ROOT_DIR}/scripts/nodes.sh" -h >/dev/null
 "${ROOT_DIR}/scripts/models.sh" -h >/dev/null
-"${ROOT_DIR}/scripts/tunnel.sh" -h >/dev/null
 "${ROOT_DIR}/scripts/remote.sh" -h >/dev/null
-"${ROOT_DIR}/scripts/remote-gpu.sh" -h >/dev/null
-"${ROOT_DIR}/scripts/remote-dev.sh" -h >/dev/null
 "${ROOT_DIR}/scripts/verify.sh" -h >/dev/null
 
 section "Read-only Smoke"
 "${ROOT_DIR}/scripts/env.sh" profiles >/dev/null
+"${ROOT_DIR}/scripts/remote.sh" targets >/dev/null
+"${ROOT_DIR}/scripts/remote.sh" tunnel --target dev --dry-run >/dev/null
+if printf '' | python3 "${ROOT_DIR}/scripts/lib/remote_gpu_format.py" --host smoke --json >/dev/null 2>&1; then
+  die "remote_gpu_format.py accepted an empty snapshot" 1
+fi
 
 section "Diff Check"
 git -C "$ROOT_DIR" diff --check
