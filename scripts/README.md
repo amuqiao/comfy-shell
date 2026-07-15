@@ -11,10 +11,12 @@ env.sh                  profile 激活与查看
 check_env.sh            只读环境体检
 dev.sh                  本机 ComfyUI 环境准备和进程生命周期
 nodes.sh                ComfyUI-Manager 依赖状态和安装
+models.sh               可选模型清单查看和显式下载
+tunnel.sh               本机到远程服务器 ComfyUI 的 SSH 端口转发
 create-shell-submodule.sh  壳仓库脚手架
 ```
 
-当前阶段不提供 Docker、服务器部署、模型下载或第三方 custom nodes 管理入口。新增能力前，先判断它是否属于已有入口的子命令；只有职责边界不同、生命周期不同或安全边界不同，才新增顶层 `*.sh`。
+当前阶段不提供 Docker 或第三方 custom nodes 管理入口。新增能力前，先判断它是否属于已有入口的子命令；只有职责边界不同、生命周期不同或安全边界不同，才新增顶层 `*.sh`。
 
 ## 入口职责
 
@@ -94,6 +96,7 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 - `dev.sh start` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
 - `dev.sh stop` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
 - `nodes.sh install manager` 会安装 `ComfyUI/manager_requirements.txt` 到 `.venv`。
+- `tunnel.sh` 会在当前终端打开 SSH 本地端口转发，不启动远程服务，不写文件。
 
 安装、下载、启动都必须由用户显式执行对应命令；不要在只读命令里顺手修复环境。
 `dev.sh start` 默认启用上游 ComfyUI-Manager；壳脚本本身不会在启动时执行
@@ -110,6 +113,7 @@ bash -n scripts/*.sh
 ./scripts/check_env.sh -h
 ./scripts/dev.sh -h
 ./scripts/nodes.sh -h
+./scripts/tunnel.sh -h
 git diff --check
 ```
 
