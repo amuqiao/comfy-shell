@@ -96,7 +96,8 @@ ComfyUI/models/upscale_models/     放大模型
 | `heroine-i2v-core` | 图生视频主线模型包 | 给 `scripts/models.sh` 用，不是页面模板 |
 | `heroine-t2v-explore` | 文生视频探索模型包 | 非主路径 |
 
-只读查看：
+只读查看。`list` 只读取 catalog；`status` 和 `plan` 需要 `.env` 或
+`--profile FILE` 中有 `COMFY_MODEL_ROOT`：
 
 ```bash
 ./scripts/models.sh list

@@ -59,7 +59,7 @@ usage() {
   ./scripts/models.sh list
   ./scripts/models.sh status
   ./scripts/models.sh status heroine-i2v-core
-  ./scripts/models.sh plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example
+  ./scripts/models.sh plan heroine-i2v-core --profile .env.example
   HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
   ./scripts/models.sh plan heroine-t2v-explore
 
@@ -100,7 +100,7 @@ EOF
 常用示例:
   ./scripts/models.sh status
   ./scripts/models.sh status heroine-i2v-core
-  ./scripts/models.sh status --profile configs/profiles/macos-mps.env.example
+  ./scripts/models.sh status --profile .env.example
 EOF
       ;;
     plan)
@@ -118,7 +118,7 @@ EOF
 
 常用示例:
   ./scripts/models.sh plan heroine-i2v-core
-  ./scripts/models.sh plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example
+  ./scripts/models.sh plan heroine-i2v-core --profile .env.example
 EOF
       ;;
     download)
@@ -137,7 +137,7 @@ EOF
 
 常用示例:
   HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
-  ./scripts/models.sh download heroine-i2v-core --profile configs/profiles/macos-mps.env.example
+  ./scripts/models.sh download heroine-i2v-core --profile .env.example
 EOF
       ;;
     *)
@@ -175,13 +175,15 @@ parse_optional_profile_args() {
   done
 }
 
-model_root() {
+set_model_root_value() {
+  local target_var="$1"
   local configured
+  [[ "$target_var" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "invalid target variable: $target_var" 2
   require_config_file
-  configured="$(required_config_value COMFY_MODEL_ROOT)"
+  set_required_config_value configured COMFY_MODEL_ROOT
   case "$configured" in
-    /*) printf '%s' "$configured" ;;
-    *) printf '%s/%s' "$ROOT_DIR" "$configured" ;;
+    /*) printf -v "$target_var" '%s' "$configured" ;;
+    *) printf -v "$target_var" '%s/%s' "$ROOT_DIR" "$configured" ;;
   esac
 }
 
@@ -198,9 +200,15 @@ PY
 }
 
 catalog_python() {
+  local mode="$1"
+  local model_root_value=""
+
   require_catalog
   require_python_yaml
-  MODEL_ROOT="$(model_root)" "$PYTHON_BIN" - "$CATALOG_FILE" "$@" <<'PY'
+  if [[ "$mode" != "list" ]]; then
+    set_model_root_value model_root_value
+  fi
+  MODEL_ROOT="$model_root_value" "$PYTHON_BIN" - "$CATALOG_FILE" "$@" <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -210,7 +218,7 @@ import yaml
 catalog_path = Path(sys.argv[1])
 mode = sys.argv[2]
 bundle_name = sys.argv[3] if len(sys.argv) > 3 else ""
-model_root = Path(os.environ["MODEL_ROOT"])
+model_root = Path(os.environ["MODEL_ROOT"]) if mode != "list" else None
 
 with catalog_path.open("r", encoding="utf-8") as fh:
     data = yaml.safe_load(fh) or {}
@@ -226,6 +234,9 @@ def bundle_items():
     return sorted(bundles.items())
 
 def model_path(model):
+    if model_root is None:
+        print("ERROR: MODEL_ROOT is unavailable for this mode", file=sys.stderr)
+        raise SystemExit(2)
     return model_root / model["directory"] / model["filename"]
 
 if mode == "list":
@@ -277,14 +288,16 @@ resolve_hf_command() {
 
 download_bundle() {
   local bundle="$1"
+  local model_root_value
   require_catalog
   require_python_yaml
   [[ -n "$bundle" ]] || die "download requires bundle" 2
+  set_model_root_value model_root_value
   resolve_hf_command
   section "Download Plan"
   catalog_python plan "$bundle"
   section "Download"
-  MODEL_ROOT="$(model_root)" "$PYTHON_BIN" - "$CATALOG_FILE" "$bundle" <<'PY' | while IFS=$'\t' read -r repo remote_path local_dir; do
+  MODEL_ROOT="$model_root_value" "$PYTHON_BIN" - "$CATALOG_FILE" "$bundle" <<'PY' | while IFS=$'\t' read -r repo remote_path local_dir; do
 import os
 import sys
 from pathlib import Path

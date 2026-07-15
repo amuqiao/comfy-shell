@@ -73,7 +73,8 @@
 如果是第一次在这台机器运行，按根 [README](../../README.md) 的本机启动流程先准备环境：
 
 ```bash
-cp configs/profiles/macos-mps.env.example .env
+cp .env.example .env
+# 本机 macOS 运行前, 按 .env.example 注释把 .env 改成 macos-mps / mps。
 ./scripts/check_env.sh --no-network
 ./scripts/local.sh bootstrap
 ./scripts/local.sh start

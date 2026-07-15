@@ -10,7 +10,8 @@ stays inside the `ComfyUI/` submodule.
 ```text
 comfy-shell/
   ComfyUI/           # submodule: git@github.com:Comfy-Org/ComfyUI.git, branch master
-  configs/profiles/  # optional macOS MPS / Linux CUDA config examples
+  .env.example       # default project config example
+  configs/models/    # optional model catalog
   scripts/           # shell-managed local scripts
   tools/             # one-off scaffolding tools
 ```
@@ -33,14 +34,12 @@ Use the ComfyUI web UI / Manager UI manually after the local service is running.
 Create `.env` once before running lifecycle commands:
 
 ```bash
-cp configs/profiles/macos-mps.env.example .env
+cp .env.example .env
 ```
 
-For a server checkout:
-
-```bash
-cp configs/profiles/server-cuda-a10.env.example .env
-```
+`.env.example` keeps one concrete server CUDA example plus commented macOS
+overrides. Edit `.env` for the machine you are running on before lifecycle
+commands.
 
 Scripts read `.env` by default. Process environment variables override `.env`
 values. Use `--profile FILE` only when you intentionally want a one-command
@@ -104,7 +103,10 @@ install dependencies, download models, or start ComfyUI.
 Use the shell scripts to prepare and run ComfyUI with Manager enabled:
 
 ```bash
-cp configs/profiles/macos-mps.env.example .env
+cp .env.example .env
+# Edit .env for macOS: COMFY_PROFILE=macos-mps, COMFY_DEVICE=mps,
+# TORCH_PRE=true, TORCH_INDEX_URL=https://download.pytorch.org/whl/nightly/cpu,
+# COMFY_MODEL_ROOT=./ComfyUI/models, COMFY_OUTPUT_ROOT=./ComfyUI/output.
 ./scripts/check_env.sh --no-network
 ./scripts/local.sh bootstrap
 ./scripts/local.sh start
@@ -138,11 +140,22 @@ scheduled from the UI.
 
 ## Remote Server Run
 
-Remote development reads visible `REMOTE_*` values from `.env` by default:
+Remote development reads visible `REMOTE_*` values from `.env` by default.
+Before copying the commands below, make sure the local `.env` contains the real
+remote target:
+
+```dotenv
+REMOTE_HOST=wangqiao@47.94.108.140
+REMOTE_DIR=/data/wangqiao/comfy-shell
+REMOTE_READY_URL=http://127.0.0.1:8188
+REMOTE_TUNNEL_LOCAL_PORT=8188
+REMOTE_TUNNEL_REMOTE_HOST=127.0.0.1
+REMOTE_TUNNEL_REMOTE_PORT=8188
+```
 
 ```bash
 ./scripts/remote.sh sync --yes
-ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp configs/profiles/server-cuda-a10.env.example .env'
+ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.example .env'
 ./scripts/remote.sh bootstrap --yes
 ./scripts/remote.sh start --yes
 ./scripts/remote.sh status
@@ -150,7 +163,6 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp configs/profiles
 ./scripts/remote.sh gpu
 ```
 
-`remote.sh` reads `REMOTE_HOST` and `REMOTE_DIR` from `.env` by default.
 Use `--host` or `--dir` only for one-off overrides. Write and lifecycle commands
 still require `--yes` and print the resolved remote plan before execution.
 

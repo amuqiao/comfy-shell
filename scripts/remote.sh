@@ -37,7 +37,10 @@ usage() {
   不管理 Docker、systemd、第三方 custom_nodes、模型自动下载或公网端口暴露。
   不读取远端 secret, 不执行自由 shell 片段, 不提供兼容 wrapper。
 
-配置来源:
+配置与环境变量:
+  无 --host/--dir 的命令读取仓库根目录 .env 中的真实远端目标:
+    REMOTE_HOST=wangqiao@47.94.108.140
+    REMOTE_DIR=/data/wangqiao/comfy-shell
   默认读取仓库根目录 .env 的 REMOTE_* 键; 已导出的同名环境变量优先。
   CLI 参数只覆盖本次调用: --profile、--host、--dir、--url、--local-port、--remote-port。
   --profile FILE 指定本机 remote.sh 本次读取的配置文件。
@@ -56,9 +59,12 @@ usage() {
   stderr 输出参数错误、缺少依赖、ssh/rsync/curl/nvidia-smi 诊断。
 
 常用示例:
+  # 首次或 .env 缺 REMOTE_* 时, 先把 .env.example 中的 REMOTE_* 合并到 .env。
   ./scripts/remote.sh sync --yes
   ./scripts/remote.sh bootstrap --yes
   ./scripts/remote.sh start --yes
+  ./scripts/remote.sh restart --yes
+  ./scripts/remote.sh stop --yes
   ./scripts/remote.sh status
   ./scripts/remote.sh logs --tail 200
   ./scripts/remote.sh tunnel
@@ -90,7 +96,11 @@ usage_sync() {
   --delete               删除远端多余的非排除文件。
   -h, --help             显示本帮助。
 
-示例:
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST 和 REMOTE_DIR; 已导出环境变量优先。
+
+常用示例:
+  # 前提: .env 已包含 REMOTE_HOST 和 REMOTE_DIR
   ./scripts/remote.sh sync --yes
 EOF
 }
@@ -110,10 +120,14 @@ usage_bootstrap() {
   --uv-index-url URL     为远端 local.sh bootstrap 注入 UV_INDEX_URL。
   -h, --help             显示本帮助。
 
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST 和 REMOTE_DIR; 已导出环境变量优先。
+
 远端动作:
   cd REMOTE_DIR && ./scripts/local.sh bootstrap
 
-示例:
+常用示例:
+  # 前提: .env 已包含 REMOTE_HOST 和 REMOTE_DIR
   ./scripts/remote.sh bootstrap --yes
 EOF
 }
@@ -133,6 +147,9 @@ usage_lifecycle() {
   --dir REMOTE_DIR       覆盖 REMOTE_DIR。
   -h, --help             显示本帮助。
 
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST 和 REMOTE_DIR; 已导出环境变量优先。
+
 远端动作:
   cd REMOTE_DIR && ./scripts/local.sh ${action}
 EOF
@@ -148,6 +165,9 @@ usage_status() {
   --host USER@HOST       覆盖 REMOTE_HOST。
   --dir REMOTE_DIR       覆盖 REMOTE_DIR。
   -h, --help             显示本帮助。
+
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST 和 REMOTE_DIR; 已导出环境变量优先。
 
 远端动作:
   cd REMOTE_DIR && ./scripts/local.sh status
@@ -166,6 +186,9 @@ usage_logs() {
   --tail N|all           输出日志尾部行数或全部日志; 默认 REMOTE_LOG_TAIL, 回退 200。
   --follow               跟随远端 local.sh logs。
   -h, --help             显示本帮助。
+
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST、REMOTE_DIR 和 REMOTE_LOG_TAIL; 已导出环境变量优先。
 EOF
 }
 
@@ -179,6 +202,9 @@ usage_ready() {
   --host USER@HOST       覆盖 REMOTE_HOST。
   --url URL              远端本机可访问的 ComfyUI base URL。
   -h, --help             显示本帮助。
+
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST 和 REMOTE_READY_URL; 已导出环境变量优先。
 
 远端动作:
   curl URL/system_stats
@@ -198,6 +224,9 @@ usage_tunnel() {
   --remote-port PORT     覆盖 REMOTE_TUNNEL_REMOTE_PORT。
   --dry-run              只打印 ssh -L 命令, 不建立隧道。
   -h, --help             显示本帮助。
+
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST 和 REMOTE_TUNNEL_*; 已导出环境变量优先。
 EOF
 }
 
@@ -212,6 +241,9 @@ usage_gpu() {
   --connect-timeout N    SSH ConnectTimeout 秒数; 默认 REMOTE_GPU_CONNECT_TIMEOUT, 回退 10。
   --json                 stdout 只输出单个 JSON 文档。
   -h, --help             显示本帮助。
+
+配置与环境变量:
+  默认读取 .env 的 REMOTE_HOST 和 REMOTE_GPU_CONNECT_TIMEOUT; 已导出环境变量优先。
 EOF
 }
 
@@ -298,6 +330,35 @@ require_yes() {
   [[ "$confirmed" == true ]] || usage_error "remote write/lifecycle command requires --yes" usage
 }
 
+remote_config_error() {
+  local missing="$1"
+  local needs_dir="$2"
+  local verb="is"
+  if [[ "$missing" == *,* ]]; then
+    verb="are"
+  fi
+
+  {
+    printf 'ERROR: %s %s not configured.\n\n' "$missing" "$verb"
+    printf 'remote.sh does not guess remote targets. Configure real values through exported environment, --profile FILE, or %s.\n\n' "$CONFIG_FILE"
+    printf 'Add to config:\n'
+    printf '  REMOTE_HOST=wangqiao@47.94.108.140\n'
+    if [[ "$needs_dir" == true ]]; then
+      printf '  REMOTE_DIR=/data/wangqiao/comfy-shell\n'
+    else
+      printf '  # REMOTE_DIR=/data/wangqiao/comfy-shell  # needed by checkout commands\n'
+    fi
+    printf '\nThen rerun the same command.\n'
+    printf '\nOne-off override examples:\n'
+    if [[ "$needs_dir" == true ]]; then
+      printf '  ./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell\n'
+    else
+      printf '  ./scripts/remote.sh tunnel --host wangqiao@47.94.108.140\n'
+    fi
+  } >&2
+  exit 2
+}
+
 apply_remote_host_default() {
   if [[ -z "${host:-}" ]]; then
     host="$(config_value REMOTE_HOST)"
@@ -312,14 +373,22 @@ apply_remote_dir_default() {
 
 require_host() {
   apply_remote_host_default
-  [[ -n "$host" ]] || usage_error "REMOTE_HOST is required in config or pass --host" usage
+  [[ -n "$host" ]] || remote_config_error "REMOTE_HOST" false
   validate_remote_host "$host"
 }
 
 require_host_dir() {
-  require_host
+  local missing=""
+  apply_remote_host_default
   apply_remote_dir_default
-  [[ -n "$remote_dir" ]] || usage_error "REMOTE_DIR is required in config or pass --dir" usage
+  if [[ -z "$host" ]]; then
+    missing="REMOTE_HOST"
+  fi
+  if [[ -z "$remote_dir" ]]; then
+    missing="${missing:+$missing, }REMOTE_DIR"
+  fi
+  [[ -z "$missing" ]] || remote_config_error "$missing" true
+  validate_remote_host "$host"
   validate_remote_dir "$remote_dir"
 }
 

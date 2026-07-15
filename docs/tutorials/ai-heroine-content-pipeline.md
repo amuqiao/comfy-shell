@@ -177,7 +177,8 @@ heroine-i2v-core
 如果这是第一次在本机运行 comfy-shell：
 
 ```bash
-cp configs/profiles/macos-mps.env.example .env
+cp .env.example .env
+# 本机 macOS 运行前, 按 .env.example 注释把 .env 改成 macos-mps / mps。
 ./scripts/check_env.sh --no-network
 ./scripts/local.sh bootstrap
 ```
@@ -817,7 +818,8 @@ full body fashion pose, the woman slowly turns around, gentle hair movement, smo
 探索变装、试穿、动作控制、LoRA
 ```
 
-这时再看模型包命令：
+这时再看模型包命令。`list` 只读取 catalog；`plan` 需要 `.env` 或
+`--profile FILE` 中有 `COMFY_MODEL_ROOT`：
 
 ```bash
 ./scripts/models.sh list

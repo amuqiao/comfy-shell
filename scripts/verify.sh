@@ -109,14 +109,14 @@ done
 
 section "Read-only Smoke"
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --no-network >/dev/null
-COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile configs/profiles/macos-mps.env.example --no-network >/dev/null
+COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile .env.example --no-network >/dev/null
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
-"${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example >/dev/null
-"${ROOT_DIR}/scripts/remote.sh" tunnel --profile configs/profiles/macos-mps.env.example --local-port 18188 --dry-run >/dev/null
+"${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile .env.example >/dev/null
+"${ROOT_DIR}/scripts/remote.sh" tunnel --profile .env.example --local-port 18188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile configs/profiles/macos-mps.env.example
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile configs/profiles/macos-mps.env.example --unknown
-expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile configs/profiles/macos-mps.env.example
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile .env.example
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile .env.example --unknown
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile .env.example
 if printf '' | python3 "${ROOT_DIR}/scripts/lib/remote_gpu_format.py" --host smoke --json >/dev/null 2>&1; then
   die "remote_gpu_format.py accepted an empty snapshot" 1
 fi
@@ -163,9 +163,69 @@ fi
 if ! COMFY_MODEL_ROOT=/tmp/comfy-shell-env-models "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_profile" | grep -q '/tmp/comfy-shell-env-models'; then
   die "exported COMFY_MODEL_ROOT did not override explicit --profile file" 1
 fi
+missing_model_profile="$contract_tmp_dir/no-model-root.env"
+cat >"$missing_model_profile" <<'EOF'
+COMFY_PROFILE=verify-missing-model-root
+COMFY_ENV_BACKEND=uv
+COMFY_PYTHON=3.12
+COMFY_DEVICE=cpu
+COMFY_HOST=127.0.0.1
+COMFY_PORT=18188
+COMFY_OUTPUT_ROOT=/tmp/comfy-shell-missing-model-output
+EOF
+"${ROOT_DIR}/scripts/models.sh" list >/dev/null
+set +e
+missing_model_output="$("${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$missing_model_profile" 2>&1)"
+missing_model_status=$?
+set -e
+if [[ "$missing_model_status" -ne 2 ]]; then
+  die "models.sh plan without COMFY_MODEL_ROOT returned $missing_model_status, expected 2" 1
+fi
+if printf '%s\n' "$missing_model_output" | grep -q '^TARGET'; then
+  die "models.sh plan without COMFY_MODEL_ROOT printed a target path" 1
+fi
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" status --profile "$missing_model_profile"
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" download heroine-i2v-core --profile "$missing_model_profile"
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" bootstrap --profile "$contract_profile"
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile "$contract_profile"
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_tmp_dir/missing.env" --dry-run
+missing_remote_profile="$contract_tmp_dir/no-remote.env"
+cat >"$missing_remote_profile" <<'EOF'
+COMFY_PROFILE=verify-missing-remote
+COMFY_ENV_BACKEND=uv
+COMFY_PYTHON=3.12
+COMFY_DEVICE=cpu
+COMFY_HOST=127.0.0.1
+COMFY_PORT=18188
+COMFY_MODEL_ROOT=/tmp/comfy-shell-missing-remote-models
+COMFY_OUTPUT_ROOT=/tmp/comfy-shell-missing-remote-output
+EOF
+set +e
+missing_remote_output="$("${ROOT_DIR}/scripts/remote.sh" status --profile "$missing_remote_profile" 2>&1 >/dev/null)"
+missing_remote_status=$?
+set -e
+if [[ "$missing_remote_status" -ne 2 ]]; then
+  die "remote.sh missing REMOTE_* returned $missing_remote_status, expected 2" 1
+fi
+if ! printf '%s\n' "$missing_remote_output" | grep -q 'REMOTE_HOST, REMOTE_DIR are not configured'; then
+  die "remote.sh missing REMOTE_* did not explain missing keys" 1
+fi
+if printf '%s\n' "$missing_remote_output" | grep -q '^用法:'; then
+  die "remote.sh missing REMOTE_* printed full usage instead of concise config guidance" 1
+fi
+set +e
+missing_remote_host_output="$("${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$missing_remote_profile" --dry-run 2>&1 >/dev/null)"
+missing_remote_host_status=$?
+set -e
+if [[ "$missing_remote_host_status" -ne 2 ]]; then
+  die "remote.sh missing REMOTE_HOST returned $missing_remote_host_status, expected 2" 1
+fi
+if ! printf '%s\n' "$missing_remote_host_output" | grep -q 'REMOTE_HOST is not configured'; then
+  die "remote.sh host-only missing REMOTE_HOST did not explain missing key" 1
+fi
+if printf '%s\n' "$missing_remote_host_output" | grep -q '^用法:'; then
+  die "remote.sh host-only missing REMOTE_HOST printed full usage instead of concise config guidance" 1
+fi
 if ! "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_profile" --dry-run | grep -q '18188:127.0.0.1:18189'; then
   die "remote.sh did not read REMOTE_TUNNEL_* from explicit --profile file" 1
 fi

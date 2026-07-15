@@ -90,7 +90,7 @@ usage() {
 
 常用示例:
   UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
-  ./scripts/local.sh bootstrap --profile configs/profiles/macos-mps.env.example
+  ./scripts/local.sh bootstrap --profile .env.example
   ./scripts/local.sh start
   ./scripts/local.sh status
   ./scripts/local.sh logs
@@ -142,7 +142,7 @@ PyTorch wheel 源示例:
   会访问网络并写入 .venv、.run/、logs/。不会下载模型,不会启动 ComfyUI。
 
 常用示例:
-  ./scripts/local.sh bootstrap --profile configs/profiles/macos-mps.env.example
+  ./scripts/local.sh bootstrap --profile .env.example
   ./scripts/local.sh bootstrap
   UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
 EOF
@@ -173,7 +173,7 @@ EOF
 
 常用示例:
   ./scripts/local.sh start
-  ./scripts/local.sh start --profile configs/profiles/macos-mps.env.example
+  ./scripts/local.sh start --profile .env.example
   ./scripts/local.sh status
 EOF
       ;;
@@ -193,7 +193,7 @@ EOF
 
 常用示例:
   ./scripts/local.sh stop
-  ./scripts/local.sh stop --profile configs/profiles/macos-mps.env.example
+  ./scripts/local.sh stop --profile .env.example
 EOF
       ;;
     restart)
@@ -207,7 +207,7 @@ EOF
 
 常用示例:
   ./scripts/local.sh restart
-  ./scripts/local.sh restart --profile configs/profiles/macos-mps.env.example
+  ./scripts/local.sh restart --profile .env.example
 EOF
       ;;
     status)
@@ -221,7 +221,7 @@ EOF
 
 常用示例:
   ./scripts/local.sh status
-  ./scripts/local.sh status --profile configs/profiles/macos-mps.env.example
+  ./scripts/local.sh status --profile .env.example
 EOF
       ;;
     logs)
@@ -286,15 +286,15 @@ parse_config_args() {
 load_config() {
   require_config_file
   # shellcheck disable=SC2034
-  COMFY_PROFILE="$(required_config_value COMFY_PROFILE)"
-  COMFY_ENV_BACKEND="$(required_config_value COMFY_ENV_BACKEND)"
-  COMFY_PYTHON_VERSION="$(required_config_value COMFY_PYTHON)"
+  set_required_config_value COMFY_PROFILE COMFY_PROFILE
+  set_required_config_value COMFY_ENV_BACKEND COMFY_ENV_BACKEND
+  set_required_config_value COMFY_PYTHON_VERSION COMFY_PYTHON
   # shellcheck disable=SC2034
-  COMFY_DEVICE="$(required_config_value COMFY_DEVICE)"
-  COMFY_HOST="$(required_config_value COMFY_HOST)"
-  COMFY_PORT="$(required_config_value COMFY_PORT)"
-  required_config_value COMFY_MODEL_ROOT >/dev/null
-  COMFY_OUTPUT_ROOT="$(required_config_value COMFY_OUTPUT_ROOT)"
+  set_required_config_value COMFY_DEVICE COMFY_DEVICE
+  set_required_config_value COMFY_HOST COMFY_HOST
+  set_required_config_value COMFY_PORT COMFY_PORT
+  set_required_config_value COMFY_MODEL_ROOT_VALUE COMFY_MODEL_ROOT
+  set_required_config_value COMFY_OUTPUT_ROOT COMFY_OUTPUT_ROOT
   TORCH_PRE_VALUE="$(config_value TORCH_PRE)"
   TORCH_INDEX_URL_VALUE="$(config_value TORCH_INDEX_URL)"
   HF_ENDPOINT_VALUE="$(config_value HF_ENDPOINT)"

@@ -111,12 +111,14 @@ config_value() {
   env_value_from "$key" "$CONFIG_FILE"
 }
 
-required_config_value() {
-  local key="$1"
+set_required_config_value() {
+  local target_var="$1"
+  local key="$2"
   local value
+  [[ "$target_var" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "invalid target variable: $target_var" 2
   value="$(config_value "$key")"
   [[ -n "$value" ]] || die "missing required config: $key in process environment or $CONFIG_FILE" 2
-  printf '%s' "$value"
+  printf -v "$target_var" '%s' "$value"
 }
 
 repo_path() {
