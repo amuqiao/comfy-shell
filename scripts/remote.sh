@@ -16,16 +16,16 @@ DEFAULT_CONNECT_TIMEOUT="10"
 usage() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh sync --host USER@HOST --dir REMOTE_DIR --yes [options]
-  ./scripts/remote.sh bootstrap --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE] [options]
-  ./scripts/remote.sh start --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
-  ./scripts/remote.sh stop --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
-  ./scripts/remote.sh restart --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
-  ./scripts/remote.sh status --host USER@HOST --dir REMOTE_DIR [--profile FILE]
-  ./scripts/remote.sh logs --host USER@HOST --dir REMOTE_DIR [--tail N|all] [--follow]
-  ./scripts/remote.sh ready --host USER@HOST [--url URL]
-  ./scripts/remote.sh tunnel --host USER@HOST [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run]
-  ./scripts/remote.sh gpu --host USER@HOST [--connect-timeout SECONDS] [--json]
+  ./scripts/remote.sh sync --yes [options]
+  ./scripts/remote.sh bootstrap --yes [options]
+  ./scripts/remote.sh start --yes [options]
+  ./scripts/remote.sh stop --yes [options]
+  ./scripts/remote.sh restart --yes [options]
+  ./scripts/remote.sh status [options]
+  ./scripts/remote.sh logs [--tail N|all] [--follow] [options]
+  ./scripts/remote.sh ready [--url URL] [options]
+  ./scripts/remote.sh tunnel [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run] [options]
+  ./scripts/remote.sh gpu [--connect-timeout SECONDS] [--json] [options]
   ./scripts/remote.sh -h|--help
   ./scripts/remote.sh <command> -h|--help
 
@@ -38,10 +38,10 @@ usage() {
   不读取远端 secret, 不执行自由 shell 片段, 不提供兼容 wrapper。
 
 配置来源:
-  显式 CLI 参数是唯一稳定入口: --host、--dir、--profile、--url、--local-port、--remote-port。
-  本脚本不隐式补齐 host、dir 或端口。
-  未传 --profile 时, 远端 local.sh 默认读取远端 checkout 根目录 .env。
-  传 --profile FILE 时, FILE 是远端 checkout 内的显式配置文件路径。
+  默认读取仓库根目录 .env 的 REMOTE_* 键; 已导出的同名环境变量优先。
+  CLI 参数只覆盖本次调用: --profile、--host、--dir、--url、--local-port、--remote-port。
+  --profile FILE 指定本机 remote.sh 本次读取的配置文件。
+  远端 local.sh 默认读取远端 checkout 根目录 .env。
 
 副作用与保护边界:
   sync/bootstrap/start/stop/restart 必须显式传 --yes。
@@ -56,13 +56,13 @@ usage() {
   stderr 输出参数错误、缺少依赖、ssh/rsync/curl/nvidia-smi 诊断。
 
 常用示例:
-  ./scripts/remote.sh sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-  ./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-  ./scripts/remote.sh start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-  ./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
-  ./scripts/remote.sh logs --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --tail 200
-  ./scripts/remote.sh tunnel --host wangqiao@47.94.108.140 --local-port 8188 --remote-port 8188
-  ./scripts/remote.sh gpu --host wangqiao@47.94.108.140
+  ./scripts/remote.sh sync --yes
+  ./scripts/remote.sh bootstrap --yes
+  ./scripts/remote.sh start --yes
+  ./scripts/remote.sh status
+  ./scripts/remote.sh logs --tail 200
+  ./scripts/remote.sh tunnel
+  ./scripts/remote.sh gpu
 
 Exit Codes:
   0  成功; ready 返回 HTTP 200。
@@ -76,36 +76,37 @@ EOF
 usage_sync() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh sync --host USER@HOST --dir REMOTE_DIR --yes [options]
+  ./scripts/remote.sh sync --yes [options]
 
 必需参数:
-  --host USER@HOST       SSH 目标。
-  --dir REMOTE_DIR       远端 checkout 绝对路径。
   --yes                  确认执行写操作。
 
 选项:
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --dir REMOTE_DIR       覆盖 REMOTE_DIR。
   --local-dir DIR        本地 checkout, 默认当前仓库根目录。
   --follow-links         rsync 跟随符号链接。
   --delete               删除远端多余的非排除文件。
   -h, --help             显示本帮助。
 
 示例:
-  ./scripts/remote.sh sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+  ./scripts/remote.sh sync --yes
 EOF
 }
 
 usage_bootstrap() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh bootstrap --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE] [options]
+  ./scripts/remote.sh bootstrap --yes [options]
 
 必需参数:
-  --host USER@HOST       SSH 目标。
-  --dir REMOTE_DIR       远端 checkout 绝对路径。
   --yes                  确认执行写操作。
 
 选项:
-  --profile FILE         远端 checkout 内的显式配置文件路径; 未传时读取远端 .env。
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --dir REMOTE_DIR       覆盖 REMOTE_DIR。
   --uv-index-url URL     为远端 local.sh bootstrap 注入 UV_INDEX_URL。
   -h, --help             显示本帮助。
 
@@ -113,7 +114,7 @@ usage_bootstrap() {
   cd REMOTE_DIR && ./scripts/local.sh bootstrap
 
 示例:
-  ./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+  ./scripts/remote.sh bootstrap --yes
 EOF
 }
 
@@ -121,15 +122,15 @@ usage_lifecycle() {
   local action="${1:-${cmd:-start}}"
   cat <<EOF
 用法:
-  ./scripts/remote.sh ${action} --host USER@HOST --dir REMOTE_DIR --yes [--profile FILE]
+  ./scripts/remote.sh ${action} --yes [options]
 
 必需参数:
-  --host USER@HOST       SSH 目标。
-  --dir REMOTE_DIR       远端 checkout 绝对路径。
   --yes                  确认执行写操作。
 
 选项:
-  --profile FILE         远端 checkout 内的显式配置文件路径; 未传时读取远端 .env。
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --dir REMOTE_DIR       覆盖 REMOTE_DIR。
   -h, --help             显示本帮助。
 
 远端动作:
@@ -140,14 +141,12 @@ EOF
 usage_status() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh status --host USER@HOST --dir REMOTE_DIR [--profile FILE]
-
-必需参数:
-  --host USER@HOST       SSH 目标。
-  --dir REMOTE_DIR       远端 checkout 绝对路径。
+  ./scripts/remote.sh status [options]
 
 选项:
-  --profile FILE         远端 checkout 内的显式配置文件路径; 未传时读取远端 .env。
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --dir REMOTE_DIR       覆盖 REMOTE_DIR。
   -h, --help             显示本帮助。
 
 远端动作:
@@ -158,14 +157,13 @@ EOF
 usage_logs() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh logs --host USER@HOST --dir REMOTE_DIR [--tail N|all] [--follow]
-
-必需参数:
-  --host USER@HOST       SSH 目标。
-  --dir REMOTE_DIR       远端 checkout 绝对路径。
+  ./scripts/remote.sh logs [--tail N|all] [--follow] [options]
 
 选项:
-  --tail N|all           输出日志尾部行数或全部日志, 默认 200。
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --dir REMOTE_DIR       覆盖 REMOTE_DIR。
+  --tail N|all           输出日志尾部行数或全部日志; 默认 REMOTE_LOG_TAIL, 回退 200。
   --follow               跟随远端 local.sh logs。
   -h, --help             显示本帮助。
 EOF
@@ -174,13 +172,12 @@ EOF
 usage_ready() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh ready --host USER@HOST [--url URL]
-
-必需参数:
-  --host USER@HOST       SSH 目标。
+  ./scripts/remote.sh ready [--url URL] [options]
 
 选项:
-  --url URL              远端本机可访问的 ComfyUI base URL, 默认 http://127.0.0.1:8188。
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --url URL              远端本机可访问的 ComfyUI base URL。
   -h, --help             显示本帮助。
 
 远端动作:
@@ -191,15 +188,14 @@ EOF
 usage_tunnel() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh tunnel --host USER@HOST [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run]
-
-必需参数:
-  --host USER@HOST       SSH 目标。
+  ./scripts/remote.sh tunnel [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run] [options]
 
 选项:
-  --local-port PORT      本地监听端口, 默认 8188。
-  --remote-host HOST     远端转发目标 host, 默认 127.0.0.1。
-  --remote-port PORT     远端转发目标端口, 默认 8188。
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --local-port PORT      覆盖 REMOTE_TUNNEL_LOCAL_PORT。
+  --remote-host HOST     覆盖 REMOTE_TUNNEL_REMOTE_HOST。
+  --remote-port PORT     覆盖 REMOTE_TUNNEL_REMOTE_PORT。
   --dry-run              只打印 ssh -L 命令, 不建立隧道。
   -h, --help             显示本帮助。
 EOF
@@ -208,13 +204,12 @@ EOF
 usage_gpu() {
   cat <<'EOF'
 用法:
-  ./scripts/remote.sh gpu --host USER@HOST [--connect-timeout SECONDS] [--json]
-
-必需参数:
-  --host USER@HOST       SSH 目标。
+  ./scripts/remote.sh gpu [--connect-timeout SECONDS] [--json] [options]
 
 选项:
-  --connect-timeout N    SSH ConnectTimeout 秒数, 默认 10。
+  --profile FILE         本机 remote.sh 本次读取的配置文件。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --connect-timeout N    SSH ConnectTimeout 秒数; 默认 REMOTE_GPU_CONNECT_TIMEOUT, 回退 10。
   --json                 stdout 只输出单个 JSON 文档。
   -h, --help             显示本帮助。
 EOF
@@ -303,14 +298,28 @@ require_yes() {
   [[ "$confirmed" == true ]] || usage_error "remote write/lifecycle command requires --yes" usage
 }
 
+apply_remote_host_default() {
+  if [[ -z "${host:-}" ]]; then
+    host="$(config_value REMOTE_HOST)"
+  fi
+}
+
+apply_remote_dir_default() {
+  if [[ -z "${remote_dir:-}" ]]; then
+    remote_dir="$(config_value REMOTE_DIR)"
+  fi
+}
+
 require_host() {
-  [[ -n "$host" ]] || usage_error "--host is required" usage
+  apply_remote_host_default
+  [[ -n "$host" ]] || usage_error "REMOTE_HOST is required in config or pass --host" usage
   validate_remote_host "$host"
 }
 
 require_host_dir() {
   require_host
-  [[ -n "$remote_dir" ]] || usage_error "--dir is required" usage
+  apply_remote_dir_default
+  [[ -n "$remote_dir" ]] || usage_error "REMOTE_DIR is required in config or pass --dir" usage
   validate_remote_dir "$remote_dir"
 }
 
@@ -318,7 +327,7 @@ print_remote_plan() {
   local action="$1"
   local host_value="$2"
   local dir_value="$3"
-  local profile_value="$4"
+  local config_value="$4"
   local delete_value="$5"
   shift 5
   local remote_action
@@ -329,8 +338,8 @@ print_remote_plan() {
   if [[ -n "$dir_value" ]]; then
     event "DIR" "$dir_value"
   fi
-  if [[ -n "$profile_value" ]]; then
-    event "PROFILE" "$profile_value"
+  if [[ -n "$config_value" ]]; then
+    event "CONFIG" "$config_value"
   fi
   if [[ -n "$delete_value" ]]; then
     event "DELETE" "$delete_value"
@@ -343,6 +352,15 @@ print_remote_plan() {
 parse_host_common() {
   consumed=0
   case "$1" in
+    --profile)
+      [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--profile requires a value" usage
+      validate_profile_arg "$2"
+      profile="$2"
+      set_config_file "$2"
+      require_config_file
+      consumed=2
+      return 0
+      ;;
     --host)
       [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--host requires a value" usage
       host="$2"
@@ -382,6 +400,7 @@ case "$cmd" in
   sync)
     host=""
     remote_dir=""
+    profile=""
     local_dir="$ROOT_DIR"
     follow_links=false
     delete_remote=false
@@ -426,7 +445,7 @@ case "$cmd" in
       "sync" \
       "$host" \
       "$remote_dir" \
-      "" \
+      "$profile" \
       "$delete_remote" \
       "ssh mkdir -p $remote_dir" \
       "rsync $local_dir/ -> ${host}:${remote_dir%/}/"
@@ -467,11 +486,6 @@ case "$cmd" in
     while [[ $# -gt 0 ]]; do
       if parse_host_dir_common "$@"; then shift "$consumed"; continue; fi
       case "$1" in
-        --profile)
-          [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--profile requires a value" usage
-          profile="$2"
-          shift 2
-          ;;
         --uv-index-url)
           [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--uv-index-url requires a value" usage
           uv_index_url="$2"
@@ -491,18 +505,12 @@ case "$cmd" in
       esac
     done
     require_host_dir
-    if [[ -n "$profile" ]]; then
-      validate_profile_arg "$profile"
-    fi
     require_yes "$yes"
     if [[ -n "$uv_index_url" ]]; then
       validate_url "$uv_index_url"
     fi
     require_cmd ssh
     bootstrap_args=(./scripts/local.sh bootstrap)
-    if [[ -n "$profile" ]]; then
-      bootstrap_args+=(--profile "$profile")
-    fi
     bootstrap_remote_action="cd $remote_dir && $(quote_cmd "${bootstrap_args[@]}")"
     if [[ -n "$uv_index_url" ]]; then
       bootstrap_remote_action="cd $remote_dir && UV_INDEX_URL=$uv_index_url $(quote_cmd "${bootstrap_args[@]}")"
@@ -531,11 +539,6 @@ case "$cmd" in
     while [[ $# -gt 0 ]]; do
       if parse_host_dir_common "$@"; then shift "$consumed"; continue; fi
       case "$1" in
-        --profile)
-          [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--profile requires a value" usage_lifecycle
-          profile="$2"
-          shift 2
-          ;;
         --yes)
           yes=true
           shift
@@ -550,15 +553,9 @@ case "$cmd" in
       esac
     done
     require_host_dir
-    if [[ -n "$profile" ]]; then
-      validate_profile_arg "$profile"
-    fi
     require_yes "$yes"
     require_cmd ssh
     lifecycle_args=(./scripts/local.sh "$cmd")
-    if [[ -n "$profile" ]]; then
-      lifecycle_args+=(--profile "$profile")
-    fi
     print_remote_plan \
       "$cmd" \
       "$host" \
@@ -577,11 +574,6 @@ case "$cmd" in
     while [[ $# -gt 0 ]]; do
       if parse_host_dir_common "$@"; then shift "$consumed"; continue; fi
       case "$1" in
-        --profile)
-          [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--profile requires a value" usage_status
-          profile="$2"
-          shift 2
-          ;;
         -h|--help)
           usage_status
           exit 0
@@ -592,14 +584,8 @@ case "$cmd" in
       esac
     done
     require_host_dir
-    if [[ -n "$profile" ]]; then
-      validate_profile_arg "$profile"
-    fi
     require_cmd ssh
     status_args=(./scripts/local.sh status)
-    if [[ -n "$profile" ]]; then
-      status_args+=(--profile "$profile")
-    fi
     remote_command="$(remote_cd_cmd "$remote_dir" "${status_args[@]}")"
     ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
     exec "${ssh_args[@]}"
@@ -607,6 +593,7 @@ case "$cmd" in
   ready)
     host=""
     remote_dir=""
+    profile=""
     url=""
     while [[ $# -gt 0 ]]; do
       if parse_host_common "$@"; then shift "$consumed"; continue; fi
@@ -625,6 +612,7 @@ case "$cmd" in
           ;;
       esac
     done
+    url="${url:-$(config_value REMOTE_READY_URL)}"
     url="${url:-$DEFAULT_READY_URL}"
     require_host
     validate_url "$url"
@@ -636,7 +624,8 @@ case "$cmd" in
   logs)
     host=""
     remote_dir=""
-    tail_lines="$DEFAULT_LOG_TAIL"
+    profile=""
+    tail_lines=""
     follow=false
     while [[ $# -gt 0 ]]; do
       if parse_host_dir_common "$@"; then shift "$consumed"; continue; fi
@@ -659,6 +648,8 @@ case "$cmd" in
           ;;
       esac
     done
+    tail_lines="${tail_lines:-$(config_value REMOTE_LOG_TAIL)}"
+    tail_lines="${tail_lines:-$DEFAULT_LOG_TAIL}"
     require_host_dir
     validate_tail "$tail_lines"
     require_cmd ssh
@@ -679,6 +670,7 @@ case "$cmd" in
   tunnel)
     host=""
     remote_dir=""
+    profile=""
     local_port=""
     remote_host=""
     remote_port=""
@@ -714,8 +706,11 @@ case "$cmd" in
           ;;
       esac
     done
+    local_port="${local_port:-$(config_value REMOTE_TUNNEL_LOCAL_PORT)}"
     local_port="${local_port:-$DEFAULT_LOCAL_PORT}"
+    remote_host="${remote_host:-$(config_value REMOTE_TUNNEL_REMOTE_HOST)}"
     remote_host="${remote_host:-$DEFAULT_REMOTE_HOST}"
+    remote_port="${remote_port:-$(config_value REMOTE_TUNNEL_REMOTE_PORT)}"
     remote_port="${remote_port:-$DEFAULT_REMOTE_PORT}"
     require_host
     validate_port "--local-port" "$local_port"
@@ -732,7 +727,8 @@ case "$cmd" in
   gpu)
     host=""
     remote_dir=""
-    connect_timeout="${REMOTE_GPU_CONNECT_TIMEOUT:-$DEFAULT_CONNECT_TIMEOUT}"
+    profile=""
+    connect_timeout=""
     json_output=false
     while [[ $# -gt 0 ]]; do
       if parse_host_common "$@"; then shift "$consumed"; continue; fi
@@ -755,6 +751,8 @@ case "$cmd" in
           ;;
       esac
     done
+    connect_timeout="${connect_timeout:-$(config_value REMOTE_GPU_CONNECT_TIMEOUT)}"
+    connect_timeout="${connect_timeout:-$DEFAULT_CONNECT_TIMEOUT}"
     require_host
     validate_positive_uint "--connect-timeout" "$connect_timeout"
     require_cmd ssh

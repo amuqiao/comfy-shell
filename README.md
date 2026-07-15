@@ -45,6 +45,8 @@ cp configs/profiles/server-cuda-a10.env.example .env
 Scripts read `.env` by default. Process environment variables override `.env`
 values. Use `--profile FILE` only when you intentionally want a one-command
 override from another config file. Do not commit `.env`.
+Remote defaults such as `REMOTE_HOST`, `REMOTE_DIR`, and tunnel ports also live
+in `.env`; keep the real host and path visible there instead of using aliases.
 
 ## Clone
 
@@ -136,19 +138,21 @@ scheduled from the UI.
 
 ## Remote Server Run
 
-Remote development uses explicit, copyable connection parameters:
+Remote development reads visible `REMOTE_*` values from `.env` by default:
 
 ```bash
-./scripts/remote.sh sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
+./scripts/remote.sh sync --yes
 ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp configs/profiles/server-cuda-a10.env.example .env'
-./scripts/remote.sh bootstrap --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-./scripts/remote.sh start --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --yes
-./scripts/remote.sh status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
-./scripts/remote.sh tunnel --host wangqiao@47.94.108.140 --local-port 8188 --remote-port 8188
-./scripts/remote.sh gpu --host wangqiao@47.94.108.140
+./scripts/remote.sh bootstrap --yes
+./scripts/remote.sh start --yes
+./scripts/remote.sh status
+./scripts/remote.sh tunnel
+./scripts/remote.sh gpu
 ```
 
-Commands print the resolved remote plan before write/lifecycle actions.
+`remote.sh` reads `REMOTE_HOST` and `REMOTE_DIR` from `.env` by default.
+Use `--host` or `--dir` only for one-off overrides. Write and lifecycle commands
+still require `--yes` and print the resolved remote plan before execution.
 
 ## Business Tutorial
 

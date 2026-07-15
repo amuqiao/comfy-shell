@@ -112,10 +112,10 @@ COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --no-network >/dev/null
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile configs/profiles/macos-mps.env.example --no-network >/dev/null
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
 "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile configs/profiles/macos-mps.env.example >/dev/null
-"${ROOT_DIR}/scripts/remote.sh" tunnel --host wangqiao@47.94.108.140 --local-port 18188 --remote-port 8188 --dry-run >/dev/null
+"${ROOT_DIR}/scripts/remote.sh" tunnel --profile configs/profiles/macos-mps.env.example --local-port 18188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell
-expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --host wangqiao@47.94.108.140 --dir /data/wangqiao/comfy-shell --unknown
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile configs/profiles/macos-mps.env.example
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile configs/profiles/macos-mps.env.example --unknown
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile configs/profiles/macos-mps.env.example
 if printf '' | python3 "${ROOT_DIR}/scripts/lib/remote_gpu_format.py" --host smoke --json >/dev/null 2>&1; then
   die "remote_gpu_format.py accepted an empty snapshot" 1
@@ -134,11 +134,24 @@ COMFY_HOST=127.0.0.1
 COMFY_PORT=18188
 COMFY_MODEL_ROOT=/tmp/comfy-shell-profile-models
 COMFY_OUTPUT_ROOT=/tmp/comfy-shell-profile-output
+REMOTE_HOST=verify@example.com
+REMOTE_DIR=/tmp/comfy-shell-remote
+REMOTE_READY_URL=http://127.0.0.1:18188
+REMOTE_TUNNEL_LOCAL_PORT=18188
+REMOTE_TUNNEL_REMOTE_HOST=127.0.0.1
+REMOTE_TUNNEL_REMOTE_PORT=18189
+REMOTE_LOG_TAIL=42
+REMOTE_GPU_CONNECT_TIMEOUT=3
 EOF
 
 if [[ -f "$ROOT_DIR/.env" ]]; then
   COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/local.sh" status >/dev/null
   "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core >/dev/null
+  if [[ -n "$(env_value_from REMOTE_HOST "$ROOT_DIR/.env")" && -n "$(env_value_from REMOTE_DIR "$ROOT_DIR/.env")" ]]; then
+    "${ROOT_DIR}/scripts/remote.sh" tunnel --dry-run >/dev/null
+  else
+    event "SKIP" "default-remote" ".env has no REMOTE_HOST/REMOTE_DIR"
+  fi
 else
   event "SKIP" "default-.env" ".env not found"
 fi
@@ -149,6 +162,18 @@ if ! "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_
 fi
 if ! COMFY_MODEL_ROOT=/tmp/comfy-shell-env-models "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_profile" | grep -q '/tmp/comfy-shell-env-models'; then
   die "exported COMFY_MODEL_ROOT did not override explicit --profile file" 1
+fi
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" bootstrap --profile "$contract_profile"
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile "$contract_profile"
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_tmp_dir/missing.env" --dry-run
+if ! "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_profile" --dry-run | grep -q '18188:127.0.0.1:18189'; then
+  die "remote.sh did not read REMOTE_TUNNEL_* from explicit --profile file" 1
+fi
+if ! REMOTE_TUNNEL_LOCAL_PORT=18190 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_profile" --dry-run | grep -q '18190:127.0.0.1:18189'; then
+  die "exported REMOTE_TUNNEL_LOCAL_PORT did not override explicit --profile file" 1
+fi
+if ! "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_profile" --host override@example.com --local-port 18191 --remote-host localhost --remote-port 18192 --dry-run | grep -q '18191:localhost:18192 override@example.com'; then
+  die "remote.sh CLI tunnel overrides did not win over profile config" 1
 fi
 
 section "Diff Check"

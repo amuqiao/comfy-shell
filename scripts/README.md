@@ -78,6 +78,12 @@ COMFY_PORT             ComfyUI 监听端口
 TORCH_PRE              true 时安装 PyTorch 使用 --pre
 TORCH_INDEX_URL        PyTorch 专用 wheel 源
 UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
+REMOTE_HOST            remote.sh 默认 SSH 目标, 例如 wangqiao@47.94.108.140
+REMOTE_DIR             remote.sh 默认远端 checkout 绝对路径
+REMOTE_READY_URL       remote.sh ready 默认检查的远端本机 URL
+REMOTE_TUNNEL_*        remote.sh tunnel 默认本地/远端 host/端口
+REMOTE_LOG_TAIL        remote.sh logs 默认 tail 行数
+REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 ```
 
 `TORCH_INDEX_URL` 只用于 `torch` / `torchvision` / `torchaudio` 安装。`UV_INDEX_URL` 是 `uv` 自身读取的环境变量，影响普通 Python 依赖，例如 ComfyUI requirements 和 Manager 依赖。
@@ -97,7 +103,8 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 - `local.sh stop` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
 - `nodes.sh install manager` 会安装 `ComfyUI/manager_requirements.txt` 到 `.venv`。
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
-  或远端 ComfyUI 进程；`remote.sh status/ready/logs` 只读查看远端状态。
+  或远端 ComfyUI 进程；默认目标来自 `.env` 的 `REMOTE_HOST` / `REMOTE_DIR`。
+  `remote.sh status/ready/logs` 只读查看远端状态。
 - `remote.sh gpu` 只读查询远端 `nvidia-smi`，不会管理进程或文件。
 - `remote.sh tunnel` 会在当前终端打开 SSH 本地端口转发，不启动远程服务，不写文件。
 
