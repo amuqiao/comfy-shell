@@ -179,7 +179,7 @@ heroine-i2v-core
 ```bash
 ./scripts/env.sh use macos-mps
 ./scripts/check_env.sh --no-network
-./scripts/dev.sh bootstrap
+./scripts/local.sh bootstrap
 ```
 
 准备本次实验目录：
@@ -191,8 +191,8 @@ mkdir -p assets/heroine/inputs assets/heroine/references assets/heroine/identity
 启动 ComfyUI：
 
 ```bash
-./scripts/dev.sh start
-./scripts/dev.sh status
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 浏览器打开：

@@ -9,7 +9,7 @@
 ```text
 env.sh                  profile 激活与查看
 check_env.sh            只读环境体检
-dev.sh                  本机 ComfyUI 环境准备和进程生命周期
+local.sh                  本机 ComfyUI 环境准备和进程生命周期
 nodes.sh                ComfyUI-Manager 依赖状态和安装
 models.sh               可选模型清单查看和显式下载
 remote.sh               远端项目 checkout 编排、隧道和 GPU 诊断
@@ -63,7 +63,7 @@ Shell 入口默认只负责：
 > 脚本默认值
 ```
 
-不要把任意 profile 键都假设为可用命令前缀覆盖。比如当前 `dev.sh bootstrap`
+不要把任意 profile 键都假设为可用命令前缀覆盖。比如当前 `local.sh bootstrap`
 从 `.env` 读取 `TORCH_INDEX_URL`，不会读取命令前缀里的
 `TORCH_INDEX_URL=...`。如果未来需要这种覆盖方式，先改实现，再改 help 示例。
 
@@ -85,7 +85,7 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 
 帮助文档里的源配置示例按这个规则写：
 
-- `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/dev.sh bootstrap`
+- `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap`
   可以作为命令前缀示例，因为它由 `uv` 自己读取。
 - `TORCH_INDEX_URL` 只作为 profile / `.env` 示例展示，不写成命令前缀，除非脚本实现已支持进程环境覆盖。
 
@@ -93,9 +93,9 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 
 - `env.sh use` 会写 `.env`。
 - `check_env.sh` 只读，不安装、不下载、不启动。
-- `dev.sh bootstrap` 会创建或复用 `.venv`，创建 `.run/` 和 `logs/`，并安装 Python 依赖。
-- `dev.sh start` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
-- `dev.sh stop` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
+- `local.sh bootstrap` 会创建或复用 `.venv`，创建 `.run/` 和 `logs/`，并安装 Python 依赖。
+- `local.sh start` 会启动本机后台 ComfyUI，写 `.run/comfyui.pid` 和 `logs/comfyui.log`。
+- `local.sh stop` 只停止 pid 文件指向且命令行匹配 ComfyUI 的进程。
 - `nodes.sh install manager` 会安装 `ComfyUI/manager_requirements.txt` 到 `.venv`。
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；`remote.sh status/ready/logs` 只读查看远端状态。
@@ -103,9 +103,9 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 - `remote.sh tunnel` 会在当前终端打开 SSH 本地端口转发，不启动远程服务，不写文件。
 
 安装、下载、启动都必须由用户显式执行对应命令；不要在只读命令里顺手修复环境。
-`dev.sh start` 默认启用上游 ComfyUI-Manager；壳脚本本身不会在启动时执行
+`local.sh start` 默认启用上游 ComfyUI-Manager；壳脚本本身不会在启动时执行
 `pip` 安装、模型下载或第三方 `custom_nodes` 安装，但 Manager 可能执行自己的
-安全检查或处理此前从 UI 排队的任务。相关提示必须写进 `dev.sh -h` 和运行输出。
+安全检查或处理此前从 UI 排队的任务。相关提示必须写进 `local.sh -h` 和运行输出。
 
 ## 验证要求
 
@@ -115,19 +115,19 @@ UV_INDEX_URL           uv 默认 Python 包索引，可在命令前临时设置
 bash -n scripts/*.sh
 ./scripts/env.sh -h
 ./scripts/check_env.sh -h
-./scripts/dev.sh -h
+./scripts/local.sh -h
 ./scripts/nodes.sh -h
 ./scripts/remote.sh -h
 ./scripts/verify.sh -h
 git diff --check
 ```
 
-修改 `dev.sh` 的启动、停止、PID 或端口逻辑后，还需要用户显式执行真实启动验证：
+修改 `local.sh` 的启动、停止、PID 或端口逻辑后，还需要用户显式执行真实启动验证：
 
 ```bash
-./scripts/dev.sh start
-./scripts/dev.sh status
-./scripts/dev.sh stop
+./scripts/local.sh start
+./scripts/local.sh status
+./scripts/local.sh stop
 ```
 
 ## 新增脚本 Checklist

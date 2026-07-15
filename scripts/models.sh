@@ -21,7 +21,7 @@ usage() {
   检查本地文件, 预览下载计划, 并在用户显式执行时调用 Hugging Face CLI 下载。
 
 不负责:
-  不参与 dev.sh bootstrap, 不自动下载模型, 不删除模型文件, 不安装 third-party custom_nodes,
+  不参与 local.sh bootstrap, 不自动下载模型, 不删除模型文件, 不安装 third-party custom_nodes,
   不修改 ComfyUI 已跟踪源码文件。
 
 运行环境:
@@ -117,8 +117,8 @@ require_catalog() {
 
 require_python_yaml() {
   [[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="$(command -v python3 2>/dev/null || true)"
-  [[ -n "$PYTHON_BIN" ]] || die "python not found; run ./scripts/dev.sh bootstrap first" 2
-  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1 || die "PyYAML not available in $PYTHON_BIN; run ./scripts/dev.sh bootstrap first" 2
+  [[ -n "$PYTHON_BIN" ]] || die "python not found; run ./scripts/local.sh bootstrap first" 2
+  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1 || die "PyYAML not available in $PYTHON_BIN; run ./scripts/local.sh bootstrap first" 2
 import yaml
 PY
 }

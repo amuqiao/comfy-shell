@@ -111,9 +111,9 @@ Use the shell scripts to prepare and run ComfyUI with Manager enabled:
 ```bash
 ./scripts/env.sh use macos-mps
 ./scripts/check_env.sh --no-network
-./scripts/dev.sh bootstrap
-./scripts/dev.sh start
-./scripts/dev.sh status
+./scripts/local.sh bootstrap
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 Open:
@@ -125,14 +125,14 @@ http://127.0.0.1:8188
 Useful lifecycle commands:
 
 ```bash
-./scripts/dev.sh logs
-./scripts/dev.sh stop
-./scripts/dev.sh restart
+./scripts/local.sh logs
+./scripts/local.sh stop
+./scripts/local.sh restart
 ./scripts/nodes.sh status
 ```
 
-`dev.sh bootstrap` creates the repository `.venv`, installs ComfyUI
-requirements, and installs `ComfyUI/manager_requirements.txt` so `dev.sh start`
+`local.sh bootstrap` creates the repository `.venv`, installs ComfyUI
+requirements, and installs `ComfyUI/manager_requirements.txt` so `local.sh start`
 can run `ComfyUI/main.py --enable-manager`. Startup arguments are assembled
 from structured profile keys such as `COMFY_HOST`, `COMFY_PORT`, and
 `CUDA_VISIBLE_DEVICES`; profile files are parsed as data and are not executed.
@@ -143,20 +143,19 @@ scheduled from the UI.
 
 ## Remote Server Run
 
-For the fixed development server, use the shortcut entry from your local
-checkout:
+For the fixed CUDA server, use the named remote target from your local checkout:
 
 ```bash
-./scripts/remote.sh sync --target dev --yes
-./scripts/remote.sh bootstrap --target dev --yes
-./scripts/remote.sh start --target dev --yes
-./scripts/remote.sh status --target dev
-./scripts/remote.sh tunnel --target dev
+./scripts/remote.sh sync --target server-a10 --yes
+./scripts/remote.sh bootstrap --target server-a10 --yes
+./scripts/remote.sh start --target server-a10 --yes
+./scripts/remote.sh status --target server-a10
+./scripts/remote.sh tunnel --target server-a10
 ```
 
-`--target dev` reads `configs/remotes/dev.env.example`. Use explicit
+`--target server-a10` reads `configs/remotes/server-a10.env.example`. Use explicit
 `--host` / `--dir` when the host or remote checkout directory is different.
-GPU diagnostics are available through `./scripts/remote.sh gpu --target dev`.
+GPU diagnostics are available through `./scripts/remote.sh gpu --target server-a10`.
 
 ## Business Tutorial
 

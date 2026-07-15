@@ -443,7 +443,7 @@ check_python_runtime() {
   if [[ -z "$runtime_python" && -x "$COMFY_DIR/venv/bin/python" ]]; then
     runtime_python="$COMFY_DIR/venv/bin/python"
     event "WARN" "ComfyUI/venv" "$runtime_python"
-    note_warn "venv-location" "检测到 ComfyUI/venv, 但壳脚本只使用仓库根目录 .venv; 请运行 ./scripts/dev.sh bootstrap"
+    note_warn "venv-location" "检测到 ComfyUI/venv, 但壳脚本只使用仓库根目录 .venv; 请运行 ./scripts/local.sh bootstrap"
   fi
   [[ -n "$runtime_python" ]] || runtime_python="$(command -v python3 2>/dev/null || true)"
   if [[ -z "$runtime_python" ]]; then

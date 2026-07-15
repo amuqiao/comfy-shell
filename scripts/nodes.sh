@@ -21,7 +21,7 @@ usage() {
 
 运行环境:
   Requires: Bash, uv, 仓库根目录 .venv/bin/python
-  前置步骤: ./scripts/dev.sh bootstrap 会自动调用 install manager。
+  前置步骤: ./scripts/local.sh bootstrap 会自动调用 install manager。
 
 命令:
   install manager     安装 ComfyUI-Manager 依赖
@@ -70,7 +70,7 @@ command_usage() {
   安装 ComfyUI/manager_requirements.txt 到仓库根目录 .venv。
 
 前置条件:
-  .venv 已存在; 否则先运行 ./scripts/dev.sh bootstrap。
+  .venv 已存在; 否则先运行 ./scripts/local.sh bootstrap。
   uv 可用。
 
 配置与环境变量:
@@ -128,7 +128,7 @@ require_file() {
 }
 
 require_venv() {
-  [[ -x "$PYTHON_BIN" ]] || die "$PYTHON_BIN not found; run ./scripts/dev.sh bootstrap first" 2
+  [[ -x "$PYTHON_BIN" ]] || die "$PYTHON_BIN not found; run ./scripts/local.sh bootstrap first" 2
 }
 
 install_manager() {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# remote.sh - SSH orchestration for remote development targets
+# remote.sh - SSH orchestration for named remote server targets
 
 set -euo pipefail
 
@@ -34,7 +34,7 @@ usage() {
 
 作用域:
   唯一远端入口。负责从本机通过 SSH/rsync 编排远端 comfy-shell checkout:
-  同步代码、激活 profile、执行远端 dev.sh 生命周期、查看日志、健康检查、SSH 隧道和 GPU 只读诊断。
+  同步代码、激活 profile、执行远端 checkout 内的 local.sh 生命周期、查看日志、健康检查、SSH 隧道和 GPU 只读诊断。
 
 不负责:
   不管理 Docker、systemd、第三方 custom_nodes、模型自动下载或公网端口暴露。
@@ -68,17 +68,17 @@ usage() {
 
 常用示例:
   ./scripts/remote.sh targets
-  ./scripts/remote.sh sync --target dev --yes
-  ./scripts/remote.sh bootstrap --target dev --yes
-  ./scripts/remote.sh start --target dev --yes
-  ./scripts/remote.sh status --target dev
-  ./scripts/remote.sh logs --target dev --tail 200
-  ./scripts/remote.sh tunnel --target dev
-  ./scripts/remote.sh gpu --target dev
+  ./scripts/remote.sh sync --target server-a10 --yes
+  ./scripts/remote.sh bootstrap --target server-a10 --yes
+  ./scripts/remote.sh start --target server-a10 --yes
+  ./scripts/remote.sh status --target server-a10
+  ./scripts/remote.sh logs --target server-a10 --tail 200
+  ./scripts/remote.sh tunnel --target server-a10
+  ./scripts/remote.sh gpu --target server-a10
 
 Exit Codes:
   0  成功; ready 返回 HTTP 200。
-  1  ready 非 HTTP 200、GPU 概览为空, 或远端 dev.sh 正常执行但业务状态未就绪。
+  1  ready 非 HTTP 200、GPU 概览为空, 或远端 checkout 内的 local.sh 正常执行但业务状态未就绪。
   2  参数、用法、配置或前置条件错误。
   3  入口保护拒绝继续, 例如目标资源或运行模式冲突。
   4  入口自身发起运行后的外部依赖、网络、快照格式化或文件产物失败。
@@ -416,9 +416,9 @@ case "$cmd" in
     fi
     require_cmd ssh
     if [[ -n "$uv_index_url" ]]; then
-      exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/env.sh use "$profile") && $(remote_cd_cmd "$remote_dir" env "UV_INDEX_URL=$uv_index_url" ./scripts/dev.sh bootstrap)"
+      exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/env.sh use "$profile") && $(remote_cd_cmd "$remote_dir" env "UV_INDEX_URL=$uv_index_url" ./scripts/local.sh bootstrap)"
     fi
-    exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/env.sh use "$profile") && $(remote_cd_cmd "$remote_dir" ./scripts/dev.sh bootstrap)"
+    exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/env.sh use "$profile") && $(remote_cd_cmd "$remote_dir" ./scripts/local.sh bootstrap)"
     ;;
   start|stop|restart)
     target=""
@@ -445,7 +445,7 @@ case "$cmd" in
     require_host_dir
     require_yes "$yes"
     require_cmd ssh
-    exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/dev.sh "$cmd")"
+    exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/local.sh "$cmd")"
     ;;
   status)
     target=""
@@ -466,7 +466,7 @@ case "$cmd" in
     apply_target_defaults
     require_host_dir
     require_cmd ssh
-    exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/dev.sh status)"
+    exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/local.sh status)"
     ;;
   ready)
     target=""
@@ -529,7 +529,7 @@ case "$cmd" in
     validate_tail "$tail_lines"
     require_cmd ssh
     if [[ "$follow" == true ]]; then
-      exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/dev.sh logs)"
+      exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" ./scripts/local.sh logs)"
     fi
     if [[ "$tail_lines" == "all" ]]; then
       exec ssh -o ConnectTimeout=10 "$host" "$(remote_cd_cmd "$remote_dir" cat logs/comfyui.log)"

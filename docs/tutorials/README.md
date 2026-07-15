@@ -75,17 +75,17 @@
 ```bash
 ./scripts/env.sh use macos-mps
 ./scripts/check_env.sh --no-network
-./scripts/dev.sh bootstrap
-./scripts/dev.sh start
-./scripts/dev.sh status
+./scripts/local.sh bootstrap
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 如果已经 bootstrap 过，日常只需要：
 
 ```bash
 ./scripts/nodes.sh status
-./scripts/dev.sh start
-./scripts/dev.sh status
+./scripts/local.sh start
+./scripts/local.sh status
 ```
 
 第一次实验前准备目录：

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dev.sh - local ComfyUI lifecycle for comfy-shell
+# local.sh - local ComfyUI lifecycle for comfy-shell
 
 set -euo pipefail
 
@@ -18,11 +18,11 @@ LOCK_HELD=0
 usage() {
   cat <<'EOF'
 用法:
-  ./scripts/dev.sh <command>
-  ./scripts/dev.sh -h|--help
+  ./scripts/local.sh <command>
+  ./scripts/local.sh -h|--help
 
 作用域:
-  管理本机 ComfyUI 开发运行。负责创建项目 .venv、安装 ComfyUI / Manager
+  管理当前机器上的 ComfyUI 运行。负责创建项目 .venv、安装 ComfyUI / Manager
   依赖、后台启动 ComfyUI、停止进程、查看状态和日志。
   不负责模型下载、第三方 custom_nodes、Docker、服务器 systemd 或远程部署。
 
@@ -85,11 +85,11 @@ usage() {
 
 常用示例:
   ./scripts/env.sh use macos-mps
-  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/dev.sh bootstrap
-  ./scripts/dev.sh start
-  ./scripts/dev.sh status
-  ./scripts/dev.sh logs
-  ./scripts/dev.sh stop
+  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
+  ./scripts/local.sh start
+  ./scripts/local.sh status
+  ./scripts/local.sh logs
+  ./scripts/local.sh stop
 
 Exit Codes:
   0  成功
@@ -105,8 +105,8 @@ command_usage() {
     bootstrap)
       cat <<'EOF'
 用法:
-  ./scripts/dev.sh bootstrap
-  ./scripts/dev.sh bootstrap -h|--help
+  ./scripts/local.sh bootstrap
+  ./scripts/local.sh bootstrap -h|--help
 
 作用域:
   使用 uv 创建或复用仓库根目录 .venv, 安装 PyTorch、ComfyUI requirements
@@ -136,15 +136,15 @@ PyTorch wheel 源示例:
 
 常用示例:
   ./scripts/env.sh use macos-mps
-  ./scripts/dev.sh bootstrap
-  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/dev.sh bootstrap
+  ./scripts/local.sh bootstrap
+  UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
 EOF
       ;;
     start)
       cat <<'EOF'
 用法:
-  ./scripts/dev.sh start
-  ./scripts/dev.sh start -h|--help
+  ./scripts/local.sh start
+  ./scripts/local.sh start -h|--help
 
 作用域:
   后台启动本机 ComfyUI, 自动传 --enable-manager, 并轮询 /system_stats。
@@ -165,15 +165,15 @@ EOF
   浏览器可打开同一个 URL。
 
 常用示例:
-  ./scripts/dev.sh start
-  ./scripts/dev.sh status
+  ./scripts/local.sh start
+  ./scripts/local.sh status
 EOF
       ;;
     stop)
       cat <<'EOF'
 用法:
-  ./scripts/dev.sh stop
-  ./scripts/dev.sh stop -h|--help
+  ./scripts/local.sh stop
+  ./scripts/local.sh stop -h|--help
 
 作用域:
   停止由本脚本启动的本机 ComfyUI 进程。
@@ -184,46 +184,46 @@ EOF
   只有 port owner 命令行匹配当前 .venv、host、port 和 --enable-manager 时才停止。
 
 常用示例:
-  ./scripts/dev.sh stop
+  ./scripts/local.sh stop
 EOF
       ;;
     restart)
       cat <<'EOF'
 用法:
-  ./scripts/dev.sh restart
-  ./scripts/dev.sh restart -h|--help
+  ./scripts/local.sh restart
+  ./scripts/local.sh restart -h|--help
 
 作用域:
   先 stop 再 start 本机 ComfyUI。
 
 常用示例:
-  ./scripts/dev.sh restart
+  ./scripts/local.sh restart
 EOF
       ;;
     status)
       cat <<'EOF'
 用法:
-  ./scripts/dev.sh status
-  ./scripts/dev.sh status -h|--help
+  ./scripts/local.sh status
+  ./scripts/local.sh status -h|--help
 
 作用域:
   只读查看本机 ComfyUI PID、URL、日志路径和 /system_stats 可达性。
 
 常用示例:
-  ./scripts/dev.sh status
+  ./scripts/local.sh status
 EOF
       ;;
     logs)
       cat <<'EOF'
 用法:
-  ./scripts/dev.sh logs
-  ./scripts/dev.sh logs -h|--help
+  ./scripts/local.sh logs
+  ./scripts/local.sh logs -h|--help
 
 作用域:
   跟随查看 logs/comfyui.log。
 
 常用示例:
-  ./scripts/dev.sh logs
+  ./scripts/local.sh logs
 EOF
       ;;
     *)
@@ -319,7 +319,7 @@ require_uv() {
 }
 
 require_venv() {
-  [[ -x "$PYTHON_BIN" ]] || die "$PYTHON_BIN not found; run ./scripts/dev.sh bootstrap" 2
+  [[ -x "$PYTHON_BIN" ]] || die "$PYTHON_BIN not found; run ./scripts/local.sh bootstrap" 2
 }
 
 require_manager() {
@@ -334,7 +334,7 @@ PY
 require_loopback_host() {
   case "$COMFY_HOST" in
     127.0.0.1|localhost|::1) ;;
-    *) die "dev.sh only allows loopback COMFY_HOST in this stage: $COMFY_HOST" 2 ;;
+    *) die "local.sh only allows loopback COMFY_HOST in this stage: $COMFY_HOST" 2 ;;
   esac
 }
 
@@ -507,7 +507,7 @@ start() {
   local elapsed=0
   while [[ ! -s "$PID_FILE" ]]; do
     if (( elapsed >= 5 )); then
-      die "ComfyUI child pid was not written; inspect ./scripts/dev.sh logs" 1
+      die "ComfyUI child pid was not written; inspect ./scripts/local.sh logs" 1
     fi
     sleep 1
     elapsed=$((elapsed + 1))
@@ -517,7 +517,7 @@ start() {
   if ! is_pid_running "$pid"; then
     tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     rm -f "$PID_FILE"
-    die "ComfyUI failed to stay running; inspect ./scripts/dev.sh logs" 1
+    die "ComfyUI failed to stay running; inspect ./scripts/local.sh logs" 1
   fi
 
   local url

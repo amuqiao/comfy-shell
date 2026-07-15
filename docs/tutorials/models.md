@@ -116,7 +116,7 @@ HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
 models.sh 不会选择 workflow
 models.sh 不会打开 ComfyUI 页面
 models.sh 不会替你判断社区 workflow 是否可信
-models.sh 不会被 dev.sh bootstrap 自动调用
+models.sh 不会被 local.sh bootstrap 自动调用
 ```
 
 ### 后续再沉淀的模型包
