@@ -289,9 +289,11 @@ env_value_from() {
 
 load_env() {
   [[ -f "$ENV_FILE" ]] || die ".env not found; run ./scripts/env.sh use macos-mps" 2
+  # shellcheck disable=SC2034
   COMFY_PROFILE="$(env_value_from COMFY_PROFILE "$ENV_FILE")"
   COMFY_ENV_BACKEND="$(env_value_from COMFY_ENV_BACKEND "$ENV_FILE")"
   COMFY_PYTHON_VERSION="$(env_value_from COMFY_PYTHON "$ENV_FILE")"
+  # shellcheck disable=SC2034
   COMFY_DEVICE="$(env_value_from COMFY_DEVICE "$ENV_FILE")"
   COMFY_HOST="$(env_value_from COMFY_HOST "$ENV_FILE")"
   COMFY_PORT="$(env_value_from COMFY_PORT "$ENV_FILE")"

@@ -303,11 +303,34 @@ check_repo() {
   section "COMFY-SHELL REPOSITORY"
   kv "ROOT_DIR" "$ROOT_DIR"
   kv "COMFY_DIR" "$COMFY_DIR"
-  [[ -f "$ROOT_DIR/.gitmodules" ]] && event "OK" ".gitmodules" "present" || { event "MISSING" ".gitmodules" "not found"; note_missing ".gitmodules" "缺少子模块配置"; }
-  [[ -d "$COMFY_DIR" ]] && event "OK" "ComfyUI" "directory present" || { event "MISSING" "ComfyUI" "directory not found"; note_missing "ComfyUI" "运行 git submodule update --init --recursive"; return; }
-  [[ -f "$COMFY_DIR/main.py" ]] && event "OK" "ComfyUI/main.py" "present" || note_missing "ComfyUI/main.py" "ComfyUI 子模块不完整"
-  [[ -f "$COMFY_DIR/requirements.txt" ]] && event "OK" "requirements" "present" || note_missing "requirements" "ComfyUI requirements.txt 缺失"
-  [[ -f "$COMFY_DIR/pyproject.toml" ]] && event "OK" "pyproject" "present" || note_warn "pyproject" "ComfyUI/pyproject.toml 缺失, 无法读取项目元数据"
+  if [[ -f "$ROOT_DIR/.gitmodules" ]]; then
+    event "OK" ".gitmodules" "present"
+  else
+    event "MISSING" ".gitmodules" "not found"
+    note_missing ".gitmodules" "缺少子模块配置"
+  fi
+  if [[ -d "$COMFY_DIR" ]]; then
+    event "OK" "ComfyUI" "directory present"
+  else
+    event "MISSING" "ComfyUI" "directory not found"
+    note_missing "ComfyUI" "运行 git submodule update --init --recursive"
+    return
+  fi
+  if [[ -f "$COMFY_DIR/main.py" ]]; then
+    event "OK" "ComfyUI/main.py" "present"
+  else
+    note_missing "ComfyUI/main.py" "ComfyUI 子模块不完整"
+  fi
+  if [[ -f "$COMFY_DIR/requirements.txt" ]]; then
+    event "OK" "requirements" "present"
+  else
+    note_missing "requirements" "ComfyUI requirements.txt 缺失"
+  fi
+  if [[ -f "$COMFY_DIR/pyproject.toml" ]]; then
+    event "OK" "pyproject" "present"
+  else
+    note_warn "pyproject" "ComfyUI/pyproject.toml 缺失, 无法读取项目元数据"
+  fi
   if git -C "$COMFY_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     event "OK" "ComfyUI-git" "$(git -C "$COMFY_DIR" rev-parse --short HEAD 2>/dev/null || true)"
   else
@@ -519,10 +542,26 @@ check_paths_and_port() {
   kv "Output root" "$output_abs"
   disk_report_for_path "model disk" "$model_abs"
   disk_report_for_path "output disk" "$output_abs"
-  [[ -d "$model_abs" ]] && event "OK" "model-root" "exists" || event "PENDING" "model-root" "directory not created"
-  [[ -w "$(dirname "$model_abs")" ]] 2>/dev/null && event "OK" "model-parent" "writable" || note_warn "model-parent" "模型目录父目录可能不可写: $(dirname "$model_abs")"
-  [[ -d "$output_abs" ]] && event "OK" "output-root" "exists" || event "PENDING" "output-root" "directory not created"
-  [[ -w "$(dirname "$output_abs")" ]] 2>/dev/null && event "OK" "output-parent" "writable" || note_warn "output-parent" "输出目录父目录可能不可写: $(dirname "$output_abs")"
+  if [[ -d "$model_abs" ]]; then
+    event "OK" "model-root" "exists"
+  else
+    event "PENDING" "model-root" "directory not created"
+  fi
+  if [[ -w "$(dirname "$model_abs")" ]] 2>/dev/null; then
+    event "OK" "model-parent" "writable"
+  else
+    note_warn "model-parent" "模型目录父目录可能不可写: $(dirname "$model_abs")"
+  fi
+  if [[ -d "$output_abs" ]]; then
+    event "OK" "output-root" "exists"
+  else
+    event "PENDING" "output-root" "directory not created"
+  fi
+  if [[ -w "$(dirname "$output_abs")" ]] 2>/dev/null; then
+    event "OK" "output-parent" "writable"
+  else
+    note_warn "output-parent" "输出目录父目录可能不可写: $(dirname "$output_abs")"
+  fi
   local comfy_path
   for comfy_path in "$COMFY_DIR/custom_nodes" "$COMFY_DIR/input" "$COMFY_DIR/output" "$COMFY_DIR/user" "$COMFY_DIR/temp"; do
     if [[ -d "$comfy_path" ]]; then
@@ -530,9 +569,9 @@ check_paths_and_port() {
       [[ -r "$comfy_path" ]] && perms="${perms}r"
       [[ -w "$comfy_path" ]] && perms="${perms}w"
       [[ -x "$comfy_path" ]] && perms="${perms}x"
-      event "OK" "${comfy_path#$COMFY_DIR/}" "exists perms=${perms:-none}"
+      event "OK" "${comfy_path#"$COMFY_DIR"/}" "exists perms=${perms:-none}"
     else
-      event "PENDING" "${comfy_path#$COMFY_DIR/}" "directory not created"
+      event "PENDING" "${comfy_path#"$COMFY_DIR"/}" "directory not created"
     fi
   done
   if [[ -f "$COMFY_DIR/extra_model_paths.yaml" ]]; then

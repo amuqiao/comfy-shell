@@ -35,6 +35,7 @@ usage() {
   --local-port PORT   本地监听端口, 默认 8188
   --remote-host HOST  远程 ComfyUI 监听地址, 默认 127.0.0.1
   --remote-port PORT  远程 ComfyUI 端口, 默认 8188
+  --dry-run           只打印 ssh 命令, 不建立隧道
   -h, --help          显示帮助
 
 环境变量:
@@ -55,6 +56,7 @@ usage() {
 常用示例:
   ./scripts/tunnel.sh
   ./scripts/tunnel.sh --local-port 18188
+  ./scripts/tunnel.sh --dry-run
   SERVER_HOST=47.94.108.140 ./scripts/tunnel.sh
 
 Exit Codes:
@@ -88,6 +90,7 @@ server_host="${SERVER_HOST:-$DEFAULT_SERVER_HOST}"
 local_port="${LOCAL_PORT:-$DEFAULT_LOCAL_PORT}"
 remote_host="${REMOTE_HOST:-$DEFAULT_REMOTE_HOST}"
 remote_port="${REMOTE_PORT:-$DEFAULT_REMOTE_PORT}"
+dry_run=false
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -120,6 +123,10 @@ while [[ "$#" -gt 0 ]]; do
       remote_port="$2"
       shift 2
       ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
     *)
       die "unknown option: $1" 2
       ;;
@@ -141,4 +148,13 @@ printf '\n'
 printf 'Keep this terminal open. Press Ctrl+C to close the tunnel.\n'
 printf '\n'
 
-exec ssh -N -L "${local_port}:${remote_host}:${remote_port}" "${server_user}@${server_host}"
+ssh_args=(ssh -o ExitOnForwardFailure=yes -N -L "${local_port}:${remote_host}:${remote_port}" "${server_user}@${server_host}")
+printf 'Command:\n'
+printf ' %q' "${ssh_args[@]}"
+printf '\n\n'
+
+if [[ "$dry_run" == true ]]; then
+  exit 0
+fi
+
+exec "${ssh_args[@]}"

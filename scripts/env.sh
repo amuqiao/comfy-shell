@@ -174,7 +174,7 @@ list_profiles() {
     name="$(basename "$path" .env.example)"
     device="$(env_value_from COMFY_DEVICE "$path")"
     backend="$(env_value_from COMFY_ENV_BACKEND "$path")"
-    event "PROFILE" "$name" "device=${device:-unknown} backend=${backend:-unknown} file=${path#$ROOT_DIR/}"
+    event "PROFILE" "$name" "device=${device:-unknown} backend=${backend:-unknown} file=${path#"$ROOT_DIR"/}"
   done < <(find "$PROFILE_DIR" -maxdepth 1 -type f -name '*.env.example' | sort)
 }
 
@@ -183,10 +183,10 @@ use_profile() {
   [[ -n "$name" ]] || die "use requires profile name" 2
   local src
   src="$(profile_path "$name")"
-  [[ -f "$src" ]] || die "profile not found: ${src#$ROOT_DIR/}" 2
+  [[ -f "$src" ]] || die "profile not found: ${src#"$ROOT_DIR"/}" 2
   cp "$src" "$ENV_FILE"
   section "Activated"
-  event "OK" "$name" ".env <- ${src#$ROOT_DIR/}"
+  event "OK" "$name" ".env <- ${src#"$ROOT_DIR"/}"
   event "NEXT" "check" "./scripts/check_env.sh"
 }
 

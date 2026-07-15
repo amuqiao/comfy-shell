@@ -141,6 +141,24 @@ The shell script itself does not download models or install third-party
 run its own startup security checks or complete tasks that were previously
 scheduled from the UI.
 
+## Remote Server Run
+
+For the fixed development server, use the shortcut entry from your local
+checkout:
+
+```bash
+./scripts/remote-dev.sh sync --yes
+./scripts/remote-dev.sh bootstrap --yes
+./scripts/remote-dev.sh start --yes
+./scripts/remote-dev.sh status
+./scripts/remote-dev.sh tunnel
+```
+
+`remote-dev.sh` keeps the current project target in one place and delegates the
+real work to reusable entries: `remote.sh` for SSH orchestration and
+`remote-gpu.sh` for read-only GPU status. Use `remote.sh` directly when the
+host or remote checkout directory is different.
+
 ## Business Tutorial
 
 The tutorial path starts from the AI heroine short-video MVP and uses ComfyUI page templates or existing workflows before model-catalog automation. Start here:
