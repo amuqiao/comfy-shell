@@ -23,6 +23,7 @@ usage() {
   ./scripts/remote.sh restart --yes [options]
   ./scripts/remote.sh status [options]
   ./scripts/remote.sh logs [--tail N|all] [--follow] [options]
+  ./scripts/remote.sh models [options] <list|status|verify|plan|download> [bundle]
   ./scripts/remote.sh ready [--url URL] [options]
   ./scripts/remote.sh tunnel [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run] [options]
   ./scripts/remote.sh gpu [--connect-timeout SECONDS] [--json] [options]
@@ -32,6 +33,7 @@ usage() {
 作用域:
   唯一远端入口。负责从本机通过 SSH/rsync 编排远端 comfy-shell checkout:
   同步代码、执行远端 checkout 内的 local.sh 生命周期、查看日志、健康检查、SSH 隧道和 GPU 只读诊断。
+  远端模型操作由 remote.sh models 委派给远端 checkout 内的 models.sh。
 
 不负责:
   不管理 Docker、systemd、第三方 custom_nodes、模型自动下载或公网端口暴露。
@@ -45,13 +47,15 @@ usage() {
   CLI 参数只覆盖本次调用: --profile、--host、--dir、--url、--local-port、--remote-port。
   --profile FILE 指定本机 remote.sh 本次读取的配置文件。
   远端 local.sh 默认读取远端 checkout 根目录 .env。
+  远端 models.sh 默认读取远端 checkout 根目录 .env; remote.sh models 不透传 models.sh --profile。
 
 副作用与保护边界:
   sync/bootstrap/start/stop/restart 必须显式传 --yes。
   sync --yes 会创建远端目录并上传本地 checkout; --delete 会删除远端多余的非排除文件。
   bootstrap --yes 会在远端写 .venv、.run/、logs/ 并访问 Python 包索引。
   start/stop/restart --yes 会在远端启动或停止 ComfyUI 进程。
-  status/logs/ready/gpu 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
+  models download 会在远端 COMFY_MODEL_ROOT 写模型文件。
+  status/logs/ready/gpu 和 models list/status/verify/plan 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
 
 输出:
   stdout 输出命令、远端脚本结果、日志、健康检查 HTTP code、隧道命令或 GPU 状态。
@@ -66,6 +70,8 @@ usage() {
   ./scripts/remote.sh restart --yes
   ./scripts/remote.sh stop --yes
   ./scripts/remote.sh status
+  ./scripts/remote.sh models plan retro-anime-photo-core
+  ./scripts/remote.sh models download retro-anime-photo-core
   ./scripts/remote.sh logs --tail 200
   ./scripts/remote.sh tunnel
   ./scripts/remote.sh gpu
@@ -189,6 +195,48 @@ usage_logs() {
 
 配置与环境变量:
   默认读取 .env 的 REMOTE_HOST、REMOTE_DIR 和 REMOTE_LOG_TAIL; 已导出环境变量优先。
+EOF
+}
+
+usage_models() {
+  cat <<'EOF'
+用法:
+  ./scripts/remote.sh models [options] list
+  ./scripts/remote.sh models [options] status [bundle]
+  ./scripts/remote.sh models [options] verify [bundle]
+  ./scripts/remote.sh models [options] plan <bundle>
+  ./scripts/remote.sh models [options] download <bundle>
+
+选项:
+  --profile FILE         本机 remote.sh 本次读取的配置文件, 只用于定位远端。
+  --host USER@HOST       覆盖 REMOTE_HOST。
+  --dir REMOTE_DIR       覆盖 REMOTE_DIR。
+  -h, --help             显示本帮助。
+
+配置与环境变量:
+  默认读取本机 .env 的 REMOTE_HOST 和 REMOTE_DIR; 已导出环境变量优先。
+  远端 models.sh 默认读取远端 checkout 根目录 .env。
+  不透传远端 models.sh --profile; 如需改变远端 COMFY_MODEL_ROOT, 修改远端 .env。
+
+远端动作:
+  cd REMOTE_DIR && ./scripts/models.sh <list|status|verify|plan|download> [bundle]
+
+边界:
+  remote.sh models 是远端模型操作入口, 只负责 SSH 和远端 checkout 定位。
+  模型清单、hash、下载和 COMFY_MODEL_ROOT 由远端 ./scripts/models.sh 负责。
+  不支持远端 inspect, 也不代理远端 models.sh 子命令帮助。
+  workflow 文件解析请在本机使用 ./scripts/models.sh inspect。
+
+副作用:
+  list/status/verify/plan 只读。
+  download 会在远端 COMFY_MODEL_ROOT 写模型文件, 不启动或停止 ComfyUI。
+
+常用示例:
+  ./scripts/remote.sh models list
+  ./scripts/remote.sh models plan retro-anime-photo-core
+  ./scripts/remote.sh models status retro-anime-photo-core
+  ./scripts/remote.sh models verify retro-anime-photo-core
+  ./scripts/remote.sh models download retro-anime-photo-core
 EOF
 }
 
@@ -733,6 +781,69 @@ case "$cmd" in
       exec "${ssh_args[@]}"
     fi
     remote_command="$(remote_cd_cmd "$remote_dir" tail -n "$tail_lines" logs/comfyui.log)"
+    ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
+    exec "${ssh_args[@]}"
+    ;;
+  models)
+    host=""
+    remote_dir=""
+    profile=""
+    models_args=()
+    models_command_seen=false
+    while [[ $# -gt 0 ]]; do
+      if [[ "$models_command_seen" == false ]] && parse_host_dir_common "$@"; then shift "$consumed"; continue; fi
+      case "$1" in
+        -h|--help)
+          if [[ "$models_command_seen" == true ]]; then
+            usage_error "remote models does not proxy remote models.sh help; run ./scripts/models.sh ${models_args[0]} -h on the target checkout" usage_models
+          else
+            usage_models
+            exit 0
+          fi
+          ;;
+        --profile|--host|--dir)
+          usage_error "$1 must appear before the models subcommand and is only used by local remote.sh" usage_models
+          ;;
+        *)
+          models_args+=("$1")
+          models_command_seen=true
+          shift
+          ;;
+      esac
+    done
+    [[ "${#models_args[@]}" -ge 1 ]] || usage_error "models requires a models.sh subcommand" usage_models
+    case "${models_args[0]}" in
+      list|status|verify|plan|download) ;;
+      inspect) usage_error "remote models does not support inspect; run ./scripts/models.sh inspect locally" usage_models ;;
+      -*) usage_error "models requires a models.sh subcommand before models args" usage_models ;;
+      *) usage_error "unsupported remote models subcommand: ${models_args[0]}" usage_models ;;
+    esac
+    if [[ "${#models_args[@]}" -gt 1 && "${models_args[1]}" == -* ]]; then
+      usage_error "remote models does not forward models.sh options: ${models_args[1]}" usage_models
+    fi
+    if [[ "${#models_args[@]}" -gt 2 ]]; then
+      usage_error "remote models accepts at most one bundle argument" usage_models
+    fi
+    case "${models_args[0]}" in
+      list)
+        [[ "${#models_args[@]}" -eq 1 ]] || usage_error "models list takes no bundle argument" usage_models
+        ;;
+      status|verify) ;;
+      plan|download)
+        [[ "${#models_args[@]}" -eq 2 ]] || usage_error "models ${models_args[0]} requires one bundle" usage_models
+        ;;
+    esac
+    require_host_dir
+    require_cmd ssh
+    remote_models_args=(./scripts/models.sh "${models_args[@]}")
+    print_remote_plan \
+      "models ${models_args[0]}" \
+      "$host" \
+      "$remote_dir" \
+      "$profile" \
+      "" \
+      "cd $remote_dir && $(quote_cmd "${remote_models_args[@]}")"
+    remote_command="$(remote_cd_cmd "$remote_dir" "${remote_models_args[@]}")"
     ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
     exec "${ssh_args[@]}"
     ;;

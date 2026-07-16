@@ -10,8 +10,8 @@
 check_env.sh            只读环境体检
 local.sh                  本机 ComfyUI 环境准备和进程生命周期
 nodes.sh                ComfyUI-Manager 依赖状态和安装
-models.sh               可选模型清单查看和显式下载
-remote.sh               远端项目 checkout 编排、隧道和 GPU 诊断
+models.sh               当前机器模型清单查看、校验和显式下载
+remote.sh               远端项目 checkout 编排、远端模型委派、隧道和 GPU 诊断
 verify.sh               scripts 最小可重复校验
 ```
 
@@ -105,6 +105,11 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；默认目标来自 `.env` 的 `REMOTE_HOST` / `REMOTE_DIR`。
   `remote.sh status/ready/logs` 只读查看远端状态。
+- `remote.sh models [options] <list|status|verify|plan|download>` 会通过 SSH 进入远端
+  checkout 并调用远端 `./scripts/models.sh ...`。其中 `download` 会在远端
+  `COMFY_MODEL_ROOT` 写模型文件；模型清单、hash 和目标目录仍由远端 `models.sh`
+  负责。这里的 `--profile` 只用于本机 `remote.sh` 定位远端，不会传给远端
+  `models.sh`；远端模型配置读取远端 checkout 根目录 `.env`。
 - `remote.sh gpu` 只读查询远端 `nvidia-smi`，不会管理进程或文件。
 - `remote.sh tunnel` 会在当前终端打开 SSH 本地端口转发，不启动远程服务，不写文件。
 

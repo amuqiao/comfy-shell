@@ -105,7 +105,7 @@ done
 for subcmd in list inspect status verify plan download; do
   "${ROOT_DIR}/scripts/models.sh" "$subcmd" -h >/dev/null
 done
-for subcmd in sync bootstrap start stop restart status logs ready tunnel gpu; do
+for subcmd in sync bootstrap start stop restart status logs models ready tunnel gpu; do
   "${ROOT_DIR}/scripts/remote.sh" "$subcmd" -h >/dev/null
 done
 
@@ -132,6 +132,7 @@ fi
 expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify retro-anime-photo-core --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" download retro-anime-photo-core --profile .env.example
 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile .env.example --local-port 18188 --dry-run >/dev/null
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example inspect .data/nodes/workflow.png
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile .env.example --unknown
@@ -220,6 +221,23 @@ expect_status 2 "${ROOT_DIR}/scripts/models.sh" download heroine-i2v-core --prof
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" bootstrap --profile "$contract_profile"
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile "$contract_profile"
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_tmp_dir/missing.env" --dry-run
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models plan retro-anime-photo-core --profile "$contract_profile"
+ssh_stub_dir="$contract_tmp_dir/bin"
+ssh_argv_file="$contract_tmp_dir/ssh-argv.txt"
+mkdir -p "$ssh_stub_dir"
+cat >"$ssh_stub_dir/ssh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"$COMFY_SHELL_SSH_ARGV_FILE"
+EOF
+chmod +x "$ssh_stub_dir/ssh"
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" plan retro-anime-photo-core >/dev/null
+if ! grep -Fxq 'verify@example.com' "$ssh_argv_file"; then
+  die "remote.sh models did not pass configured REMOTE_HOST to ssh" 1
+fi
+if ! grep -Fxq 'cd /tmp/comfy-shell-remote && ./scripts/models.sh plan retro-anime-photo-core' "$ssh_argv_file"; then
+  die "remote.sh models did not build the expected remote models.sh command" 1
+fi
 missing_remote_profile="$contract_tmp_dir/no-remote.env"
 cat >"$missing_remote_profile" <<'EOF'
 COMFY_PROFILE=verify-missing-remote
@@ -265,6 +283,16 @@ if ! REMOTE_TUNNEL_LOCAL_PORT=18190 "${ROOT_DIR}/scripts/remote.sh" tunnel --pro
 fi
 if ! "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_profile" --host override@example.com --local-port 18191 --remote-host localhost --remote-port 18192 --dry-run | grep -q '18191:localhost:18192 override@example.com'; then
   die "remote.sh CLI tunnel overrides did not win over profile config" 1
+fi
+set +e
+missing_models_output="$("${ROOT_DIR}/scripts/remote.sh" models --profile "$missing_remote_profile" plan retro-anime-photo-core 2>&1 >/dev/null)"
+missing_models_status=$?
+set -e
+if [[ "$missing_models_status" -ne 2 ]]; then
+  die "remote.sh models missing REMOTE_* returned $missing_models_status, expected 2" 1
+fi
+if ! printf '%s\n' "$missing_models_output" | grep -q 'REMOTE_HOST, REMOTE_DIR are not configured'; then
+  die "remote.sh models missing REMOTE_* did not explain missing keys" 1
 fi
 
 section "Diff Check"

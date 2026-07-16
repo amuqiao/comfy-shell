@@ -14,6 +14,7 @@
   - `ComfyUI/manager_requirements.txt`
 - `scripts/remote.sh` 通过 SSH 在远端 checkout 内调用 `scripts/local.sh`，因此 `local.sh` 不能依赖第二套壳项目依赖同步流程。
 - `scripts/models.sh` 可以拆 Python 子模块，但必须复用同一个 `.venv/bin/python`。缺少 `PyYAML` 等依赖时，应提示用户先执行 `./scripts/local.sh bootstrap`，不要自动创建或同步另一套环境。
+- `scripts/lib/models_cli.py` 是 `scripts/models.sh` 的实现细节，不是新的用户入口；文档和示例仍应只暴露 `./scripts/models.sh ...`。
 
 ### Python 与 uv
 
@@ -26,6 +27,7 @@
 ### 修改脚本时
 
 - 不要把壳脚本依赖和 ComfyUI runtime 依赖混为一谈。
+- Shell 入口负责用户合同、help 和环境边界；Python 子模块负责复杂解析、结构化数据、hash、下载计划等实现细节。
 - 如果新增 `scripts/` 里的 Python helper，优先使用 Python 标准库或 `.venv` 中已由 ComfyUI runtime 提供的依赖。
 - 如果确实需要新增第三方 Python 包，优先判断它是否应安装进同一个 `.venv`，并在对应脚本中给出明确错误提示；不要新增第二套环境或第二套依赖真源。
 - 如果新增 ComfyUI runtime 依赖，应优先确认它是否属于上游 ComfyUI、Manager、custom node 或模型资产，不要放到根目录依赖文件。
