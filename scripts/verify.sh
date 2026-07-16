@@ -133,6 +133,11 @@ expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify retro-anime-photo-core --
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" download retro-anime-photo-core --profile .env.example
 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile .env.example --local-port 18188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example inspect .data/nodes/workflow.png
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example logs
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example logs retro-anime-photo-core --tail nope
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example logs retro-anime-photo-core --tail
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example plan retro-anime-photo-core --detach
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example download retro-anime-photo-core --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile .env.example --unknown
@@ -195,6 +200,68 @@ fi
 if ! COMFY_MODEL_ROOT=/tmp/comfy-shell-env-models "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_profile" | grep -q '/tmp/comfy-shell-env-models'; then
   die "exported COMFY_MODEL_ROOT did not override explicit --profile file" 1
 fi
+hf_payload="model-data"
+hf_sha="$(printf '%s' "$hf_payload" | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')"
+hf_size="$(printf '%s' "$hf_payload" | wc -c | tr -d ' ')"
+hf_catalog="$contract_tmp_dir/hf-catalog.yaml"
+cat >"$hf_catalog" <<EOF
+version: 1
+bundles:
+  hf-endpoint-smoke:
+    title: HF endpoint smoke
+    models:
+      - id: endpoint-file
+        directory: checkpoints
+        filename: endpoint.bin
+        source: huggingface
+        repo: smoke/repo
+        path: endpoint.bin
+        sha256: $hf_sha
+        size_bytes: $hf_size
+EOF
+hf_profile="$contract_tmp_dir/hf-profile.env"
+cat >"$hf_profile" <<'EOF'
+COMFY_MODEL_ROOT=/tmp/comfy-shell-hf-endpoint-profile-models
+HF_ENDPOINT=https://profile.example
+EOF
+hf_stub_dir="$contract_tmp_dir/hf-bin"
+mkdir -p "$hf_stub_dir"
+hf_stub="$hf_stub_dir/hf"
+hf_endpoint_file="$contract_tmp_dir/hf-endpoint.txt"
+cat >"$hf_stub" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "download" ]] || exit 2
+remote_path="${3:-}"
+local_dir=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --local-dir)
+      local_dir="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+[[ -n "$remote_path" && -n "$local_dir" ]] || exit 2
+printf '%s\n' "${HF_ENDPOINT:-}" >"$COMFY_SHELL_HF_ENDPOINT_FILE"
+mkdir -p "$local_dir/$(dirname "$remote_path")"
+printf 'model-data' >"$local_dir/$remote_path"
+EOF
+chmod +x "$hf_stub"
+rm -rf /tmp/comfy-shell-hf-endpoint-profile-models /tmp/comfy-shell-hf-endpoint-env-models
+COMFY_SHELL_HF_ENDPOINT_FILE="$hf_endpoint_file" CATALOG_FILE="$hf_catalog" HF_CLI="$hf_stub" \
+  "${ROOT_DIR}/scripts/models.sh" download hf-endpoint-smoke --profile "$hf_profile" >/dev/null
+if [[ "$(cat "$hf_endpoint_file")" != "https://profile.example" ]]; then
+  die "models.sh download did not pass HF_ENDPOINT from profile to hf CLI" 1
+fi
+COMFY_SHELL_HF_ENDPOINT_FILE="$hf_endpoint_file" CATALOG_FILE="$hf_catalog" HF_CLI="$hf_stub" \
+  COMFY_MODEL_ROOT=/tmp/comfy-shell-hf-endpoint-env-models HF_ENDPOINT=https://env.example \
+  "${ROOT_DIR}/scripts/models.sh" download hf-endpoint-smoke --profile "$hf_profile" >/dev/null
+if [[ "$(cat "$hf_endpoint_file")" != "https://env.example" ]]; then
+  die "exported HF_ENDPOINT did not override profile for hf CLI" 1
+fi
 missing_model_profile="$contract_tmp_dir/no-model-root.env"
 cat >"$missing_model_profile" <<'EOF'
 COMFY_PROFILE=verify-missing-model-root
@@ -237,6 +304,34 @@ if ! grep -Fxq 'verify@example.com' "$ssh_argv_file"; then
 fi
 if ! grep -Fxq 'cd /tmp/comfy-shell-remote && ./scripts/models.sh plan retro-anime-photo-core' "$ssh_argv_file"; then
   die "remote.sh models did not build the expected remote models.sh command" 1
+fi
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" download retro-anime-photo-core --detach >/dev/null
+if ! grep -Fq 'nohup sh -c' "$ssh_argv_file"; then
+  die "remote.sh models download --detach did not build a nohup shell wrapper" 1
+fi
+# shellcheck disable=SC2016
+if ! grep -Fq './scripts/models.sh download "$bundle"' "$ssh_argv_file"; then
+  die "remote.sh models download --detach did not keep the remote models.sh download argv" 1
+fi
+if ! grep -Fq 'models-download retro-anime-photo-core' "$ssh_argv_file"; then
+  die "remote.sh models download --detach did not tag the remote process with the bundle" 1
+fi
+if ! grep -Fq '.run/models-download-retro-anime-photo-core.pid' "$ssh_argv_file"; then
+  die "remote.sh models download --detach did not write the expected pid path" 1
+fi
+if ! grep -Fq 'logs/models-download-retro-anime-photo-core.log' "$ssh_argv_file"; then
+  die "remote.sh models download --detach did not write the expected log path" 1
+fi
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" logs retro-anime-photo-core >/dev/null
+if ! grep -Fxq 'cd /tmp/comfy-shell-remote && if [ ! -f logs/models-download-retro-anime-photo-core.log ]; then printf "ERROR: remote model log not found: logs/models-download-retro-anime-photo-core.log\n" >&2; exit 2; fi; tail -n 42 logs/models-download-retro-anime-photo-core.log' "$ssh_argv_file"; then
+  die "remote.sh models logs did not use REMOTE_LOG_TAIL from profile" 1
+fi
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" logs retro-anime-photo-core --tail all --follow >/dev/null
+if ! grep -Fxq 'cd /tmp/comfy-shell-remote && if [ ! -f logs/models-download-retro-anime-photo-core.log ]; then printf "ERROR: remote model log not found: logs/models-download-retro-anime-photo-core.log\n" >&2; exit 2; fi; tail -n +1 -F logs/models-download-retro-anime-photo-core.log' "$ssh_argv_file"; then
+  die "remote.sh models logs --tail all --follow did not build the expected tail command" 1
 fi
 missing_remote_profile="$contract_tmp_dir/no-remote.env"
 cat >"$missing_remote_profile" <<'EOF'

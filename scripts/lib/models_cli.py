@@ -374,6 +374,11 @@ def inspect_workflow(workflow_file: str) -> int:
 
 
 def resolve_hf_command() -> list[str]:
+    if HF_CLI != "hf":
+        resolved_override = shutil.which(HF_CLI) if not os.path.isabs(HF_CLI) else HF_CLI
+        if resolved_override and Path(resolved_override).is_file() and os.access(resolved_override, os.X_OK):
+            return [resolved_override]
+        die(f"HF_CLI is not executable: {HF_CLI}", 2)
     project_hf = ROOT_DIR / ".venv/bin/hf"
     if project_hf.is_file() and os.access(project_hf, os.X_OK):
         return [str(project_hf)]
@@ -382,6 +387,14 @@ def resolve_hf_command() -> list[str]:
         return [resolved_hf]
     die("hf CLI not found; install huggingface_hub in .venv or set HF_CLI", 2)
     return []
+
+
+def hf_environment(config_file: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    hf_endpoint = config_value("HF_ENDPOINT", config_file)
+    if hf_endpoint and not env.get("HF_ENDPOINT"):
+        env["HF_ENDPOINT"] = hf_endpoint
+    return env
 
 
 def download_rows(data: dict[str, Any], bundle_name: str, model_root: Path) -> list[dict[str, Any]]:
@@ -418,6 +431,7 @@ def download_rows(data: dict[str, Any], bundle_name: str, model_root: Path) -> l
 def download_bundle(bundle_name: str, config_file: Path) -> int:
     data = load_catalog()
     model_root = model_root_from_config(config_file)
+    hf_env = hf_environment(config_file)
 
     section("Download Plan")
     print_plan(bundle_name, config_file)
@@ -466,7 +480,7 @@ def download_bundle(bundle_name: str, config_file: Path) -> int:
             args = hf_cmd + ["download", row["repo"], remote_path, "--local-dir", str(tmp_dir)]
             if row["repo_type"] != "model":
                 args += ["--repo-type", row["repo_type"]]
-            result = subprocess.run(args, check=False)
+            result = subprocess.run(args, check=False, env=hf_env)
             if result.returncode != 0:
                 die(f"hf download failed for {model_id}", 4)
 

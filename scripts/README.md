@@ -105,11 +105,22 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；默认目标来自 `.env` 的 `REMOTE_HOST` / `REMOTE_DIR`。
   `remote.sh status/ready/logs` 只读查看远端状态。
-- `remote.sh models [options] <list|status|verify|plan|download>` 会通过 SSH 进入远端
-  checkout 并调用远端 `./scripts/models.sh ...`。其中 `download` 会在远端
-  `COMFY_MODEL_ROOT` 写模型文件；模型清单、hash 和目标目录仍由远端 `models.sh`
-  负责。这里的 `--profile` 只用于本机 `remote.sh` 定位远端，不会传给远端
+- `remote.sh models [options] <list|status|verify|plan|download|logs>` 会通过 SSH
+  进入远端 checkout 并调用远端 `./scripts/models.sh ...`。其中 `download` 会在
+  远端 `COMFY_MODEL_ROOT` 写模型文件；模型清单、hash 和目标目录仍由远端
+  `models.sh` 负责。`download --detach` 会在远端后台运行, 写
+  `.run/models-download-<bundle>.pid` 和 `logs/models-download-<bundle>.log`。
+  这里的 `--profile` 只用于本机 `remote.sh` 定位远端，不会传给远端
   `models.sh`；远端模型配置读取远端 checkout 根目录 `.env`。
+
+远端大模型下载建议路径：
+
+```bash
+./scripts/remote.sh models plan retro-anime-photo-core
+./scripts/remote.sh models download retro-anime-photo-core --detach
+./scripts/remote.sh models logs retro-anime-photo-core --follow
+./scripts/remote.sh models verify retro-anime-photo-core
+```
 - `remote.sh gpu` 只读查询远端 `nvidia-smi`，不会管理进程或文件。
 - `remote.sh tunnel` 会在当前终端打开 SSH 本地端口转发，不启动远程服务，不写文件。
 

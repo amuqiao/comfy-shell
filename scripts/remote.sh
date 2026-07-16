@@ -23,7 +23,7 @@ usage() {
   ./scripts/remote.sh restart --yes [options]
   ./scripts/remote.sh status [options]
   ./scripts/remote.sh logs [--tail N|all] [--follow] [options]
-  ./scripts/remote.sh models [options] <list|status|verify|plan|download> [bundle]
+  ./scripts/remote.sh models [options] <list|status|verify|plan|download|logs> [bundle]
   ./scripts/remote.sh ready [--url URL] [options]
   ./scripts/remote.sh tunnel [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run] [options]
   ./scripts/remote.sh gpu [--connect-timeout SECONDS] [--json] [options]
@@ -54,8 +54,8 @@ usage() {
   sync --yes 会创建远端目录并上传本地 checkout; --delete 会删除远端多余的非排除文件。
   bootstrap --yes 会在远端写 .venv、.run/、logs/ 并访问 Python 包索引。
   start/stop/restart --yes 会在远端启动或停止 ComfyUI 进程。
-  models download 会在远端 COMFY_MODEL_ROOT 写模型文件。
-  status/logs/ready/gpu 和 models list/status/verify/plan 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
+  models download 会在远端 COMFY_MODEL_ROOT 写模型文件; --detach 会写 .run/ 和 logs/。
+  status/logs/ready/gpu 和 models list/status/verify/plan/logs 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
 
 输出:
   stdout 输出命令、远端脚本结果、日志、健康检查 HTTP code、隧道命令或 GPU 状态。
@@ -71,7 +71,8 @@ usage() {
   ./scripts/remote.sh stop --yes
   ./scripts/remote.sh status
   ./scripts/remote.sh models plan retro-anime-photo-core
-  ./scripts/remote.sh models download retro-anime-photo-core
+  ./scripts/remote.sh models download retro-anime-photo-core --detach
+  ./scripts/remote.sh models logs retro-anime-photo-core --follow
   ./scripts/remote.sh logs --tail 200
   ./scripts/remote.sh tunnel
   ./scripts/remote.sh gpu
@@ -205,7 +206,8 @@ usage_models() {
   ./scripts/remote.sh models [options] status [bundle]
   ./scripts/remote.sh models [options] verify [bundle]
   ./scripts/remote.sh models [options] plan <bundle>
-  ./scripts/remote.sh models [options] download <bundle>
+  ./scripts/remote.sh models [options] download <bundle> [--detach]
+  ./scripts/remote.sh models [options] logs <bundle> [--tail N|all] [--follow]
 
 选项:
   --profile FILE         本机 remote.sh 本次读取的配置文件, 只用于定位远端。
@@ -228,15 +230,18 @@ usage_models() {
   workflow 文件解析请在本机使用 ./scripts/models.sh inspect。
 
 副作用:
-  list/status/verify/plan 只读。
+  list/status/verify/plan/logs 只读。
   download 会在远端 COMFY_MODEL_ROOT 写模型文件, 不启动或停止 ComfyUI。
+  download --detach 会在远端后台运行, 写 .run/models-download-<bundle>.pid
+  和 logs/models-download-<bundle>.log。
 
 常用示例:
   ./scripts/remote.sh models list
   ./scripts/remote.sh models plan retro-anime-photo-core
   ./scripts/remote.sh models status retro-anime-photo-core
   ./scripts/remote.sh models verify retro-anime-photo-core
-  ./scripts/remote.sh models download retro-anime-photo-core
+  ./scripts/remote.sh models download retro-anime-photo-core --detach
+  ./scripts/remote.sh models logs retro-anime-photo-core --follow
 EOF
 }
 
@@ -332,6 +337,11 @@ validate_positive_uint() {
   [[ "$value" =~ ^[0-9]+$ && "$value" -ge 1 ]] || usage_error "$label must be a positive integer" usage
 }
 
+validate_model_bundle() {
+  local value="$1"
+  [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || usage_error "model bundle contains invalid characters: $value" usage_models
+}
+
 validate_profile_arg() {
   local value="$1"
   [[ "$value" != -* && "$value" != *[[:space:]]* ]] || usage_error "--profile contains invalid characters: $value" usage
@@ -361,6 +371,36 @@ remote_cd_cmd() {
   local dir="$1"
   shift
   printf 'cd %q && %s\n' "$dir" "$(quote_cmd "$@")"
+}
+
+remote_models_detach_cmd() {
+  local dir="$1"
+  local bundle="$2"
+  local pid_file=".run/models-download-${bundle}.pid"
+  local log_file="logs/models-download-${bundle}.log"
+  # shellcheck disable=SC2016
+  printf 'set -eu; cd %q; command -v nohup >/dev/null 2>&1 || { printf "ERROR: missing required command: nohup\\n" >&2; exit 2; }; mkdir -p .run logs; if [ -f %q ]; then pid=$(cat %q 2>/dev/null || true); if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then command=$(ps -ww -p "$pid" -o command= 2>/dev/null || ps -p "$pid" -o command= 2>/dev/null || true); case "$command" in *models-download*%q*) printf "RUNNING\\tmodels-download\\tpid=%%s log=%s\\n" "$pid"; exit 0 ;; *) rm -f %q ;; esac; fi; fi; rm -f %q; nohup sh -c '"'"'set -eu; bundle=$1; pid_file=$2; trap "rm -f \"$pid_file\"" EXIT; ./scripts/models.sh download "$bundle"'"'"' models-download %q %q > %q 2>&1 < /dev/null & pid=$!; printf "%%s\\n" "$pid" > %q; printf "STARTED\\tmodels-download\\tpid=%%s log=%s\\n" "$pid"\n' "$dir" "$pid_file" "$pid_file" "$bundle" "$log_file" "$pid_file" "$pid_file" "$bundle" "$pid_file" "$log_file" "$pid_file" "$log_file"
+}
+
+remote_models_logs_cmd() {
+  local dir="$1"
+  local bundle="$2"
+  local tail_lines="$3"
+  local follow="$4"
+  local log_file="logs/models-download-${bundle}.log"
+  local log_command
+  if [[ "$follow" == true ]]; then
+    if [[ "$tail_lines" == "all" ]]; then
+      log_command="$(quote_cmd tail -n +1 -F "$log_file")"
+    else
+      log_command="$(quote_cmd tail -n "$tail_lines" -F "$log_file")"
+    fi
+  elif [[ "$tail_lines" == "all" ]]; then
+    log_command="$(quote_cmd cat "$log_file")"
+  else
+    log_command="$(quote_cmd tail -n "$tail_lines" "$log_file")"
+  fi
+  printf 'cd %q && if [ ! -f %q ]; then printf "ERROR: remote model log not found: %s\\n" >&2; exit 2; fi; %s\n' "$dir" "$log_file" "$log_file" "$log_command"
 }
 
 remote_ready_cmd() {
@@ -788,62 +828,122 @@ case "$cmd" in
     host=""
     remote_dir=""
     profile=""
-    models_args=()
-    models_command_seen=false
+    models_command=""
+    models_bundle=""
+    models_detach=false
+    models_tail=""
+    models_follow=false
     while [[ $# -gt 0 ]]; do
-      if [[ "$models_command_seen" == false ]] && parse_host_dir_common "$@"; then shift "$consumed"; continue; fi
-      case "$1" in
-        -h|--help)
-          if [[ "$models_command_seen" == true ]]; then
-            usage_error "remote models does not proxy remote models.sh help; run ./scripts/models.sh ${models_args[0]} -h on the target checkout" usage_models
-          else
+      if [[ -z "$models_command" ]]; then
+        if parse_host_dir_common "$@"; then shift "$consumed"; continue; fi
+        case "$1" in
+          -h|--help)
             usage_models
             exit 0
-          fi
+            ;;
+          list|status|verify|plan|download|logs)
+            models_command="$1"
+            shift
+            ;;
+          inspect)
+            usage_error "remote models does not support inspect; run ./scripts/models.sh inspect locally" usage_models
+            ;;
+          -*)
+            usage_error "models requires a models subcommand before models args" usage_models
+            ;;
+          *)
+            usage_error "unsupported remote models subcommand: $1" usage_models
+            ;;
+        esac
+        continue
+      fi
+
+      case "$1" in
+        -h|--help)
+          usage_error "remote models does not proxy remote models.sh help; run ./scripts/models.sh ${models_command} -h on the target checkout" usage_models
           ;;
         --profile|--host|--dir)
           usage_error "$1 must appear before the models subcommand and is only used by local remote.sh" usage_models
           ;;
+        --detach)
+          [[ "$models_command" == "download" ]] || usage_error "--detach is only supported for models download" usage_models
+          models_detach=true
+          shift
+          ;;
+        --tail)
+          [[ "$models_command" == "logs" ]] || usage_error "--tail is only supported for models logs" usage_models
+          [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--tail requires a value" usage_models
+          models_tail="$2"
+          shift 2
+          ;;
+        --follow)
+          [[ "$models_command" == "logs" ]] || usage_error "--follow is only supported for models logs" usage_models
+          models_follow=true
+          shift
+          ;;
+        -*)
+          usage_error "remote models does not forward models.sh options: $1" usage_models
+          ;;
         *)
-          models_args+=("$1")
-          models_command_seen=true
+          [[ -z "$models_bundle" ]] || usage_error "remote models accepts at most one bundle argument" usage_models
+          models_bundle="$1"
           shift
           ;;
       esac
     done
-    [[ "${#models_args[@]}" -ge 1 ]] || usage_error "models requires a models.sh subcommand" usage_models
-    case "${models_args[0]}" in
-      list|status|verify|plan|download) ;;
-      inspect) usage_error "remote models does not support inspect; run ./scripts/models.sh inspect locally" usage_models ;;
-      -*) usage_error "models requires a models.sh subcommand before models args" usage_models ;;
-      *) usage_error "unsupported remote models subcommand: ${models_args[0]}" usage_models ;;
-    esac
-    if [[ "${#models_args[@]}" -gt 1 && "${models_args[1]}" == -* ]]; then
-      usage_error "remote models does not forward models.sh options: ${models_args[1]}" usage_models
+    [[ -n "$models_command" ]] || usage_error "models requires a models subcommand" usage_models
+    if [[ -n "$models_bundle" ]]; then
+      validate_model_bundle "$models_bundle"
     fi
-    if [[ "${#models_args[@]}" -gt 2 ]]; then
-      usage_error "remote models accepts at most one bundle argument" usage_models
-    fi
-    case "${models_args[0]}" in
+    case "$models_command" in
       list)
-        [[ "${#models_args[@]}" -eq 1 ]] || usage_error "models list takes no bundle argument" usage_models
+        [[ -z "$models_bundle" ]] || usage_error "models list takes no bundle argument" usage_models
         ;;
       status|verify) ;;
       plan|download)
-        [[ "${#models_args[@]}" -eq 2 ]] || usage_error "models ${models_args[0]} requires one bundle" usage_models
+        [[ -n "$models_bundle" ]] || usage_error "models ${models_command} requires one bundle" usage_models
+        ;;
+      logs)
+        [[ -n "$models_bundle" ]] || usage_error "models logs requires one bundle" usage_models
+        models_tail="${models_tail:-$(config_value REMOTE_LOG_TAIL)}"
+        models_tail="${models_tail:-$DEFAULT_LOG_TAIL}"
+        validate_tail "$models_tail"
         ;;
     esac
     require_host_dir
     require_cmd ssh
-    remote_models_args=(./scripts/models.sh "${models_args[@]}")
-    print_remote_plan \
-      "models ${models_args[0]}" \
-      "$host" \
-      "$remote_dir" \
-      "$profile" \
-      "" \
-      "cd $remote_dir && $(quote_cmd "${remote_models_args[@]}")"
-    remote_command="$(remote_cd_cmd "$remote_dir" "${remote_models_args[@]}")"
+    if [[ "$models_command" == "logs" ]]; then
+      remote_command="$(remote_models_logs_cmd "$remote_dir" "$models_bundle" "$models_tail" "$models_follow")"
+      print_remote_plan \
+        "models logs" \
+        "$host" \
+        "$remote_dir" \
+        "$profile" \
+        "" \
+        "$remote_command"
+    elif [[ "$models_command" == "download" && "$models_detach" == true ]]; then
+      remote_command="$(remote_models_detach_cmd "$remote_dir" "$models_bundle")"
+      print_remote_plan \
+        "models download --detach" \
+        "$host" \
+        "$remote_dir" \
+        "$profile" \
+        "" \
+        "$remote_command"
+    else
+      remote_models_args=(./scripts/models.sh "$models_command")
+      if [[ -n "$models_bundle" ]]; then
+        remote_models_args+=("$models_bundle")
+      fi
+      print_remote_plan \
+        "models ${models_command}" \
+        "$host" \
+        "$remote_dir" \
+        "$profile" \
+        "" \
+        "cd $remote_dir && $(quote_cmd "${remote_models_args[@]}")"
+      remote_command="$(remote_cd_cmd "$remote_dir" "${remote_models_args[@]}")"
+    fi
     ssh_args=(ssh -o ConnectTimeout=10 "$host" "$remote_command")
     exec "${ssh_args[@]}"
     ;;

@@ -51,7 +51,7 @@ usage() {
   默认读取仓库根目录 .env。
   --profile FILE      status/verify/plan/download 可显式指定其他配置文件。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
-  HF_ENDPOINT         可选, 例如 https://hf-mirror.com
+  HF_ENDPOINT         可选; 进程环境变量优先, 其次读取配置文件。示例: https://hf-mirror.com
   CATALOG_FILE        可选, 覆盖 catalog 路径
   PYTHON_BIN          可选, 覆盖 Python 路径
   HF_CLI              可选, 覆盖 hf CLI 路径
@@ -180,7 +180,7 @@ EOF
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
-  HF_ENDPOINT         可选环境变量, 例如 https://hf-mirror.com。
+  HF_ENDPOINT         可选; 进程环境变量优先, 其次读取配置文件。
 
 常用示例:
   HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
