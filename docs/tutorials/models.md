@@ -1,6 +1,8 @@
 # 模型管理
 
-模型管理的目标是让 ComfyUI workflow 能找到所需权重文件。MVP 阶段不要先研究模型包，先按页面缺失提示把业务流程跑通。
+模型管理的目标是让 ComfyUI workflow 能找到所需权重文件，同时保证下载来源和文件内容可复现。
+
+本文分两层：探索阶段先让页面跑通；沉淀阶段再把已确认的模型写入 `configs/models/catalog.yaml`，由 `scripts/models.sh` 做只读检查、严格校验和显式下载。
 
 ## 先分清对象
 
@@ -16,6 +18,7 @@ models.sh bundle
   -> comfy-shell 为复现准备的模型清单
   -> 例如 heroine-i2v-core
   -> 不是页面模板，不是 workflow
+  -> 只有 catalog 中确认了来源和 hash 的条目才允许自动下载
 ```
 
 所以顺序是：
@@ -25,7 +28,8 @@ models.sh bundle
 -> 页面提示缺什么模型
 -> 补齐缺失模型
 -> 跑通成片
--> 再把常用模型清单沉淀到 configs/models/catalog.yaml
+-> 用 scripts/models.sh inspect 提取 workflow 引用
+-> 再把已确认来源和 hash 的模型沉淀到 configs/models/catalog.yaml
 ```
 
 ## MVP 阶段怎么补模型
@@ -61,6 +65,40 @@ MVP 阶段只要回答这个问题：
 
 下面内容用于跑通后复现和迁移，不是第一条成片的阻塞项。
 
+### 可靠性规则
+
+workflow PNG 或 JSON 通常只告诉你“节点要加载哪个文件名”，不等于告诉你“应该从哪里下载”。
+
+因此 `models.sh` 按下面规则工作：
+
+```text
+inspect
+  -> 只从 workflow 中提取模型文件名和建议目录
+  -> 不猜下载源, 不写 catalog, 不访问网络
+
+catalog.yaml
+  -> 项目唯一的模型复现清单
+  -> source=manual 表示只记录文件名和目录, 用户自己下载
+  -> source=huggingface 必须提供 repo、path、filename、sha256
+
+plan/status
+  -> 只读
+  -> manual 显示 MANUAL
+  -> huggingface 缺 sha256 显示 BLOCKED
+
+verify
+  -> 严格检查文件存在且 sha256 正确
+  -> MANUAL、BLOCKED、MISSING、BAD 都返回非 0
+
+download
+  -> 只下载 source=huggingface 且有 sha256 的条目
+  -> 文件名必须和 catalog filename 一致
+  -> 下载后先校验 sha256, 再写入目标目录
+  -> 不把相似文件重命名成 workflow 需要的文件名
+```
+
+这条规则牺牲了一点便利性，但避免把“名字相近的模型”当成同一个模型下载，后续 Mac 和服务器复现时也能保持一致。
+
 ### 基本目录
 
 不要把所有模型都放进一个目录。按模型类型放置：
@@ -93,16 +131,23 @@ ComfyUI/models/upscale_models/     放大模型
 
 | bundle | 作用 | 说明 |
 |---|---|---|
+| `retro-anime-photo-core` | 照片转复古动漫风格 | 从 `.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png` 解析；未知可信来源的模型保持 `manual`，缺 hash 的下载项会 `BLOCKED` |
 | `heroine-i2v-core` | 图生视频主线模型包 | 给 `scripts/models.sh` 用，不是页面模板 |
 | `heroine-t2v-explore` | 文生视频探索模型包 | 非主路径 |
 
-只读查看。`list` 只读取 catalog；`status` 和 `plan` 需要 `.env` 或
-`--profile FILE` 中有 `COMFY_MODEL_ROOT`：
+从 workflow 提取模型引用：
+
+```bash
+./scripts/models.sh inspect '.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png'
+```
+
+只读查看。`list` 只读取 catalog；`status`、`verify`、`plan` 和 `download` 需要 `.env` 或 `--profile FILE` 中有 `COMFY_MODEL_ROOT`：
 
 ```bash
 ./scripts/models.sh list
-./scripts/models.sh status
-./scripts/models.sh plan heroine-i2v-core
+./scripts/models.sh plan retro-anime-photo-core --profile .env.example
+./scripts/models.sh status retro-anime-photo-core --profile .env.example
+./scripts/models.sh verify retro-anime-photo-core --profile .env.example
 ```
 
 显式下载：
@@ -111,12 +156,16 @@ ComfyUI/models/upscale_models/     放大模型
 HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
 ```
 
+如果 `plan` 输出 `MANUAL`，说明 catalog 只记录了 workflow 文件名和目标目录，需要你按可信来源手动下载。
+如果输出 `BLOCKED`，说明 catalog 写了下载源但还没有 `sha256`，脚本会拒绝自动下载；确认精确文件后补齐 `sha256`，必要时再补 `size_bytes`。
+
 注意：
 
 ```text
 models.sh 不会选择 workflow
 models.sh 不会打开 ComfyUI 页面
 models.sh 不会替你判断社区 workflow 是否可信
+models.sh 不会替你把相似文件当成同一个模型
 models.sh 不会被 local.sh bootstrap 自动调用
 ```
 

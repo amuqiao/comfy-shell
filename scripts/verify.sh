@@ -87,7 +87,9 @@ else
 fi
 
 section "Python Syntax"
-PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/comfy-shell-pycache" python3 -m py_compile "${ROOT_DIR}/scripts/lib/remote_gpu_format.py"
+PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/comfy-shell-pycache" python3 -m py_compile \
+  "${ROOT_DIR}/scripts/lib/models_cli.py" \
+  "${ROOT_DIR}/scripts/lib/remote_gpu_format.py"
 
 section "Help Smoke"
 "${ROOT_DIR}/scripts/check_env.sh" -h >/dev/null
@@ -100,7 +102,7 @@ section "Help Smoke"
 for subcmd in bootstrap start stop restart status logs; do
   "${ROOT_DIR}/scripts/local.sh" "$subcmd" -h >/dev/null
 done
-for subcmd in list status plan download; do
+for subcmd in list inspect status verify plan download; do
   "${ROOT_DIR}/scripts/models.sh" "$subcmd" -h >/dev/null
 done
 for subcmd in sync bootstrap start stop restart status logs ready tunnel gpu; do
@@ -111,7 +113,24 @@ section "Read-only Smoke"
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --no-network >/dev/null
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile .env.example --no-network >/dev/null
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
+"${ROOT_DIR}/scripts/models.sh" inspect "${ROOT_DIR}/.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png" >/dev/null
+bad_workflow_file="$(mktemp "${TMPDIR:-/tmp}/comfy-shell-bad-workflow.XXXXXX")"
+printf '{bad-json\n' >"$bad_workflow_file"
+set +e
+bad_workflow_output="$("${ROOT_DIR}/scripts/models.sh" inspect "$bad_workflow_file" 2>&1 >/dev/null)"
+bad_workflow_status=$?
+set -e
+rm -f "$bad_workflow_file"
+if [[ "$bad_workflow_status" -ne 2 ]]; then
+  die "models.sh inspect bad workflow returned $bad_workflow_status, expected 2" 1
+fi
+if printf '%s\n' "$bad_workflow_output" | grep -q 'Traceback'; then
+  die "models.sh inspect bad workflow printed Python traceback" 1
+fi
 "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile .env.example >/dev/null
+"${ROOT_DIR}/scripts/models.sh" plan retro-anime-photo-core --profile .env.example >/dev/null
+expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify retro-anime-photo-core --profile .env.example
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" download retro-anime-photo-core --profile .env.example
 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile .env.example --local-port 18188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile .env.example
@@ -128,7 +147,7 @@ contract_profile="$contract_tmp_dir/profile.env"
 cat >"$contract_profile" <<'EOF'
 COMFY_PROFILE=verify-contract
 COMFY_ENV_BACKEND=uv
-COMFY_PYTHON=3.12
+COMFY_PYTHON=3.12.13
 COMFY_DEVICE=cpu
 COMFY_HOST=127.0.0.1
 COMFY_PORT=18188
@@ -157,6 +176,18 @@ else
 fi
 
 "${ROOT_DIR}/scripts/local.sh" status --profile "$contract_profile" >/dev/null
+runtime_python_profile="$contract_tmp_dir/runtime-python.env"
+cat >"$runtime_python_profile" <<'EOF'
+COMFY_PROFILE=verify-runtime-python
+COMFY_ENV_BACKEND=uv
+COMFY_PYTHON=3.12
+COMFY_DEVICE=cpu
+COMFY_HOST=127.0.0.1
+COMFY_PORT=18188
+COMFY_MODEL_ROOT=/tmp/comfy-shell-runtime-python-models
+COMFY_OUTPUT_ROOT=/tmp/comfy-shell-runtime-python-output
+EOF
+"${ROOT_DIR}/scripts/local.sh" status --profile "$runtime_python_profile" >/dev/null
 if ! "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_profile" | grep -q '/tmp/comfy-shell-profile-models'; then
   die "models.sh did not read COMFY_MODEL_ROOT from explicit --profile file" 1
 fi
@@ -167,7 +198,7 @@ missing_model_profile="$contract_tmp_dir/no-model-root.env"
 cat >"$missing_model_profile" <<'EOF'
 COMFY_PROFILE=verify-missing-model-root
 COMFY_ENV_BACKEND=uv
-COMFY_PYTHON=3.12
+COMFY_PYTHON=3.12.13
 COMFY_DEVICE=cpu
 COMFY_HOST=127.0.0.1
 COMFY_PORT=18188
@@ -193,7 +224,7 @@ missing_remote_profile="$contract_tmp_dir/no-remote.env"
 cat >"$missing_remote_profile" <<'EOF'
 COMFY_PROFILE=verify-missing-remote
 COMFY_ENV_BACKEND=uv
-COMFY_PYTHON=3.12
+COMFY_PYTHON=3.12.13
 COMFY_DEVICE=cpu
 COMFY_HOST=127.0.0.1
 COMFY_PORT=18188

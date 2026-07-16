@@ -6,6 +6,71 @@ defaults:
   source: huggingface
 
 bundles:
+  retro-anime-photo-core:
+    title: 批量照片转绘复古动漫风格
+    tutorial: .data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png
+    description: 从 PNG workflow 解析出的 SD1.5 复古动漫风格照片转绘模型清单。未知可信来源的条目标记为 manual。
+    models:
+      - id: isabelia-v10-checkpoint
+        directory: checkpoints
+        filename: isabelia_v10.safetensors
+        source: manual
+        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 checkpoints。
+        required: true
+      - id: eighties-fusion-lora
+        directory: loras
+        filename: 80'sFusion.safetensors
+        source: manual
+        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 loras。
+        required: true
+      - id: retro-anime-lora
+        directory: loras
+        filename: Retro_Anime-000002.safetensors
+        source: manual
+        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 loras。
+        required: true
+      - id: sd15-controlnet-openpose
+        directory: controlnet
+        filename: control_v11p_sd15_openpose.pth
+        source: huggingface
+        repo: lllyasviel/ControlNet-v1-1
+        path: control_v11p_sd15_openpose.pth
+        required: true
+      - id: sd15-controlnet-depth
+        directory: controlnet
+        filename: control_v11f1p_sd15_depth.pth
+        source: huggingface
+        repo: lllyasviel/ControlNet-v1-1
+        path: control_v11f1p_sd15_depth.pth
+        required: true
+      - id: sd15-controlnet-lineart
+        directory: controlnet
+        filename: control_v11p_sd15_lineart.pth
+        source: huggingface
+        repo: lllyasviel/ControlNet-v1-1
+        path: control_v11p_sd15_lineart.pth
+        required: true
+      - id: anime-vae-kl-f8-anime2
+        directory: vae
+        filename: kl-f8-anime2.ckpt
+        source: manual
+        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 vae。
+        required: true
+      - id: ultrasharp-upscale
+        directory: upscale_models
+        filename: 4xUltrasharp_4xUltrasharpV10.pth
+        source: manual
+        note: PNG workflow 只包含文件名; 4x-UltraSharp.pth 可能是同类模型但未确认等价, 不自动重命名。
+        required: true
+      - id: easynegative-embedding
+        directory: embeddings
+        filename: EasyNegative.safetensors
+        source: huggingface
+        repo_type: dataset
+        repo: gsdf/EasyNegative
+        path: EasyNegative.safetensors
+        required: true
+
   heroine-i2v-core:
     title: AI 女主图生视频主线
     tutorial: docs/tutorials/ai-heroine-content-pipeline.md
