@@ -35,6 +35,8 @@ bundles:
         source: huggingface
         repo: lllyasviel/ControlNet-v1-1
         path: control_v11p_sd15_openpose.pth
+        sha256: db97becd92cd19aff71352a60e93c2508decba3dee64f01f686727b9b406a9dd
+        size_bytes: 1445235707
         required: true
       - id: sd15-controlnet-depth
         directory: controlnet
@@ -42,6 +44,8 @@ bundles:
         source: huggingface
         repo: lllyasviel/ControlNet-v1-1
         path: control_v11f1p_sd15_depth.pth
+        sha256: 761077ffe369fe8cf16ae353f8226bd4ca29805b161052f82c0170c7b50f1d99
+        size_bytes: 1445235365
         required: true
       - id: sd15-controlnet-lineart
         directory: controlnet
@@ -49,6 +53,8 @@ bundles:
         source: huggingface
         repo: lllyasviel/ControlNet-v1-1
         path: control_v11p_sd15_lineart.pth
+        sha256: fb5fb912696830da948e5056b50adfa3fcc68ff760c43e4e7a8499853af43c61
+        size_bytes: 1445235365
         required: true
       - id: anime-vae-kl-f8-anime2
         directory: vae
@@ -69,6 +75,8 @@ bundles:
         repo_type: dataset
         repo: gsdf/EasyNegative
         path: EasyNegative.safetensors
+        sha256: c74b4e810b030f6b75fde959e2db678c268d07115b85356d3c0138ba5eb42340
+        size_bytes: 24655
         required: true
 
   heroine-i2v-core:

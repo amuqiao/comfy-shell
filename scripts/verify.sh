@@ -130,7 +130,7 @@ fi
 "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile .env.example >/dev/null
 "${ROOT_DIR}/scripts/models.sh" plan retro-anime-photo-core --profile .env.example >/dev/null
 expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify retro-anime-photo-core --profile .env.example
-expect_status 2 "${ROOT_DIR}/scripts/models.sh" download retro-anime-photo-core --profile .env.example
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" download --profile .env.example
 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile .env.example --local-port 18188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example inspect .data/nodes/workflow.png
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example logs
