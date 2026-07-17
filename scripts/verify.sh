@@ -77,11 +77,11 @@ expect_status() {
 }
 
 section "Shell Syntax"
-bash -n "${ROOT_DIR}"/scripts/*.sh "${ROOT_DIR}"/scripts/lib/*.sh "${ROOT_DIR}"/tools/*.sh
+bash -n "${ROOT_DIR}"/scripts/*.sh "${ROOT_DIR}"/scripts/lib/*.sh "${ROOT_DIR}"/scripts/remote/*.sh "${ROOT_DIR}"/tools/*.sh
 
 section "Shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "${ROOT_DIR}"/scripts/*.sh "${ROOT_DIR}"/scripts/lib/*.sh "${ROOT_DIR}"/tools/*.sh
+  shellcheck "${ROOT_DIR}"/scripts/*.sh "${ROOT_DIR}"/scripts/lib/*.sh "${ROOT_DIR}"/scripts/remote/*.sh "${ROOT_DIR}"/tools/*.sh
 else
   event "SKIP" "shellcheck" "not found"
 fi
