@@ -13,6 +13,7 @@ HF_CLI="${HF_CLI:-hf}"
 usage() {
   cat <<'EOF'
 用法:
+  ./scripts/models.sh check
   ./scripts/models.sh list
   ./scripts/models.sh inspect <workflow.png|workflow.json>
   ./scripts/models.sh status [bundle] [--profile FILE]
@@ -31,7 +32,8 @@ usage() {
 
 运行环境:
   Requires: Bash, 仓库根目录 .venv/bin/python
-  list/status/verify/plan/download 需要 .venv 中可 import PyYAML。
+  check/list/status/verify/plan/download 需要 .venv 中可 import PyYAML。
+  check 只校验 catalog schema, 不读取 .env, 不检查模型文件, 不访问网络。
   inspect 只解析 PNG/JSON workflow metadata, 不访问网络, 不猜下载源。
   download.method=huggingface 需要 hf CLI; 优先使用 .venv/bin/hf, 其次使用 HF_CLI 或 PATH 中的 hf。
   download.method=civitai 使用 catalog 中的 Civitai API download URL。
@@ -41,6 +43,7 @@ usage() {
   download.mode=auto 必须有 sha256; 下载后先校验 hash, 再写入 target。
 
 命令:
+  check               校验 catalog.yaml schema
   list                列出 catalog 中的 bundle
   inspect <file>      从 PNG/workflow JSON 提取模型引用
   status [bundle]     检查 bundle 模型文件是否存在、是否可验证
@@ -50,8 +53,9 @@ usage() {
   help                显示本帮助
 
 配置与环境变量:
-  默认读取仓库根目录 .env。
+  status/verify/plan/download 默认读取仓库根目录 .env。
   --profile FILE      status/verify/plan/download 可显式指定其他配置文件。
+  .env.example        只是配置示例; 运行配置默认真源是 .env。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
   HF_ENDPOINT         可选; 只影响 download.method=huggingface。示例: https://hf-mirror.com
   CATALOG_FILE        可选, 覆盖 catalog 路径
@@ -59,7 +63,7 @@ usage() {
   HF_CLI              可选, 覆盖 hf CLI 路径
 
 副作用与保护边界:
-  list/inspect/status/verify/plan 只读, 不访问网络。
+  check/list/inspect/status/verify/plan 只读, 不访问网络。
   download 会创建模型子目录并写 auto 模型文件; 写入 COMFY_MODEL_ROOT 下的模型资产目录。
   manual/blocked 条目会跳过并输出下一步提示, 不会导致整个 download 提前中断。
   hash 不匹配、已有目标文件 hash 错误或网络下载失败时标记 failed, 不覆盖。
@@ -67,11 +71,12 @@ usage() {
   所有相对模型路径按仓库根目录解析。
 
 常用示例:
+  ./scripts/models.sh check
   ./scripts/models.sh list
   ./scripts/models.sh inspect '.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png'
-  ./scripts/models.sh plan retro-anime-photo-core --profile .env.example
-  ./scripts/models.sh status retro-anime-photo-core --profile .env.example
-  ./scripts/models.sh plan heroine-i2v-core --profile .env.example  # 查看 blocked 条目
+  ./scripts/models.sh plan retro-anime-photo-core
+  ./scripts/models.sh status retro-anime-photo-core
+  ./scripts/models.sh plan heroine-i2v-core  # 查看 blocked 条目
   HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download retro-anime-photo-core
 
 Exit Codes:
@@ -85,6 +90,23 @@ EOF
 command_usage() {
   local name="$1"
   case "$name" in
+    check)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh check
+  ./scripts/models.sh check -h|--help
+
+作用域:
+  校验 configs/models/catalog.yaml 的 schema。check 只读取 catalog,
+  不读取 .env, 不需要 COMFY_MODEL_ROOT, 不检查模型文件, 不访问网络。
+
+输出:
+  catalog 路径、schema version、bundle 数量和模型条目数量。
+
+常用示例:
+  ./scripts/models.sh check
+EOF
+      ;;
     list)
       cat <<'EOF'
 用法:
@@ -92,7 +114,7 @@ command_usage() {
   ./scripts/models.sh list -h|--help
 
 作用域:
-  列出 catalog 中的 bundle。list 不读取配置文件。
+  列出 catalog 中的 bundle。list 会校验 catalog schema, 不读取配置文件。
 EOF
       ;;
     inspect)
@@ -124,12 +146,12 @@ EOF
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  .env.example 只是配置示例, 不是默认运行配置。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
 
 常用示例:
   ./scripts/models.sh status
   ./scripts/models.sh status heroine-i2v-core
-  ./scripts/models.sh status --profile .env.example
 EOF
       ;;
     verify)
@@ -144,11 +166,12 @@ EOF
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  .env.example 只是配置示例, 不是默认运行配置。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
 
 常用示例:
   ./scripts/models.sh verify retro-anime-photo-core
-  ./scripts/models.sh verify heroine-i2v-core --profile .env.example
+  ./scripts/models.sh verify heroine-i2v-core
 EOF
       ;;
     plan)
@@ -163,12 +186,12 @@ EOF
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  .env.example 只是配置示例, 不是默认运行配置。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
 
 常用示例:
   ./scripts/models.sh plan retro-anime-photo-core
   ./scripts/models.sh plan heroine-i2v-core
-  ./scripts/models.sh plan heroine-i2v-core --profile .env.example
 EOF
       ;;
     download)
@@ -183,13 +206,13 @@ EOF
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  .env.example 只是配置示例, 不是默认运行配置。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
   HF_ENDPOINT         可选; 进程环境变量优先, 其次读取配置文件。
 
 常用示例:
   ./scripts/models.sh download retro-anime-photo-core
   HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download retro-anime-photo-core
-  ./scripts/models.sh download retro-anime-photo-core --profile .env.example
 EOF
       ;;
     *)
@@ -208,7 +231,7 @@ case "$command" in
   -h|--help|help)
     usage
     ;;
-  list|inspect|status|verify|plan|download)
+  check|list|inspect|status|verify|plan|download)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
       command_usage "$command"

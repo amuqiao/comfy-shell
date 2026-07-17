@@ -322,6 +322,17 @@ def list_bundles() -> int:
     return 0
 
 
+def check_catalog() -> int:
+    data = load_catalog()
+    bundles = data.get("bundles") or {}
+    model_count = sum(len(bundle.get("models") or []) for bundle in bundles.values())
+    print(f"OK\tcatalog\t{CATALOG_FILE}")
+    print(f"version\t{data['version']}")
+    print(f"bundles\t{len(bundles)}")
+    print(f"models\t{model_count}")
+    return 0
+
+
 def print_status(mode: str, bundle_name: str, config_file: Path) -> int:
     data = load_catalog()
     model_root = model_root_from_config(config_file)
@@ -738,6 +749,12 @@ def main(argv: list[str]) -> int:
             die("list takes no arguments", 2)
         section("Model Bundles")
         return list_bundles()
+
+    if command == "check":
+        if args:
+            die("check takes no arguments", 2)
+        section("Model Catalog Check")
+        return check_catalog()
 
     if command == "inspect":
         if len(args) != 1:

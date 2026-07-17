@@ -10,7 +10,7 @@
 check_env.sh            只读环境体检
 local.sh                  本机 ComfyUI 环境准备和进程生命周期
 nodes.sh                ComfyUI-Manager 依赖状态和安装
-models.sh               当前机器模型清单查看、校验和显式下载
+models.sh               当前机器模型 catalog 校验、清单查看、模型校验和显式下载
 remote.sh               远端项目 checkout 编排、远端模型委派、隧道和 GPU 诊断
 verify.sh               scripts 最小可重复校验
 ```
@@ -52,8 +52,9 @@ Shell 入口默认只负责：
 
 ## 配置边界
 
-仓库根目录 `.env` 是默认配置文件。脚本默认读取 `.env`，但不 `source` 或执行其中内容。
-如需临时读取其他配置文件，必须在命令中显式写 `--profile FILE`。`.env` 不提交。
+仓库根目录 `.env` 是默认配置真源。脚本默认读取 `.env`，但不 `source` 或执行其中内容。
+`.env.example` 只是 `cp .env.example .env` 的模板，不作为运行 profile 示例。
+如需临时读取其他配置文件，必须在命令中显式写 `--profile FILE`；这只覆盖本次命令，不改变默认真源。`.env` 不提交。
 
 配置读取规则：
 
@@ -105,7 +106,7 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；默认目标来自 `.env` 的 `REMOTE_HOST` / `REMOTE_DIR`。
   `remote.sh status/ready/logs` 只读查看远端状态。
-- `remote.sh models [options] <list|status|verify|plan|download|logs>` 会通过 SSH
+- `remote.sh models [options] <check|list|status|verify|plan|download|logs>` 会通过 SSH
   进入远端 checkout 并调用远端 `./scripts/models.sh ...`。其中 `download` 会在
   远端 `COMFY_MODEL_ROOT` 写模型文件；模型清单、hash 和目标目录仍由远端
   `models.sh` 负责。`download --detach` 会在远端后台运行, 写
@@ -116,6 +117,7 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 远端大模型下载建议路径：
 
 ```bash
+./scripts/remote.sh models check
 ./scripts/remote.sh models plan retro-anime-photo-core
 ./scripts/remote.sh models download retro-anime-photo-core --detach
 ./scripts/remote.sh models logs retro-anime-photo-core --follow
@@ -138,6 +140,7 @@ bash -n scripts/*.sh
 ./scripts/check_env.sh -h
 ./scripts/local.sh -h
 ./scripts/nodes.sh -h
+./scripts/models.sh check
 ./scripts/models.sh -h
 ./scripts/remote.sh -h
 ./scripts/verify.sh -h

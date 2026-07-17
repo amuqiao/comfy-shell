@@ -102,7 +102,7 @@ section "Help Smoke"
 for subcmd in bootstrap start stop restart status logs; do
   "${ROOT_DIR}/scripts/local.sh" "$subcmd" -h >/dev/null
 done
-for subcmd in list inspect status verify plan download; do
+for subcmd in check list inspect status verify plan download; do
   "${ROOT_DIR}/scripts/models.sh" "$subcmd" -h >/dev/null
 done
 for subcmd in sync bootstrap start stop restart status logs models ready tunnel gpu; do
@@ -112,6 +112,8 @@ done
 section "Read-only Smoke"
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --no-network >/dev/null
 COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile .env.example --no-network >/dev/null
+"${ROOT_DIR}/scripts/models.sh" check >/dev/null
+COMFY_MODEL_ROOT='' "${ROOT_DIR}/scripts/models.sh" check >/dev/null
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
 "${ROOT_DIR}/scripts/models.sh" inspect "${ROOT_DIR}/.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png" >/dev/null
 bad_workflow_file="$(mktemp "${TMPDIR:-/tmp}/comfy-shell-bad-workflow.XXXXXX")"
@@ -127,10 +129,18 @@ fi
 if printf '%s\n' "$bad_workflow_output" | grep -q 'Traceback'; then
   die "models.sh inspect bad workflow printed Python traceback" 1
 fi
-"${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile .env.example >/dev/null
-"${ROOT_DIR}/scripts/models.sh" plan retro-anime-photo-core --profile .env.example >/dev/null
-expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify retro-anime-photo-core --profile .env.example
-expect_status 2 "${ROOT_DIR}/scripts/models.sh" download --profile .env.example
+read_only_model_profile="$(mktemp "${TMPDIR:-/tmp}/comfy-shell-model-profile.XXXXXX")"
+cat >"$read_only_model_profile" <<'EOF'
+COMFY_MODEL_ROOT=/tmp/comfy-shell-read-only-models
+EOF
+"${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$read_only_model_profile" >/dev/null
+"${ROOT_DIR}/scripts/models.sh" plan retro-anime-photo-core --profile "$read_only_model_profile" >/dev/null
+expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify retro-anime-photo-core --profile "$read_only_model_profile"
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" download
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" check --profile "$read_only_model_profile"
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" check retro-anime-photo-core
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile "$read_only_model_profile"
+rm -f "$read_only_model_profile"
 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile .env.example --local-port 18188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example inspect .data/nodes/workflow.png
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example logs
@@ -141,7 +151,6 @@ expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example do
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile .env.example --unknown
-expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile .env.example
 if printf '' | python3 "${ROOT_DIR}/scripts/lib/remote_gpu_format.py" --host smoke --json >/dev/null 2>&1; then
   die "remote_gpu_format.py accepted an empty snapshot" 1
 fi
@@ -171,6 +180,7 @@ EOF
 
 if [[ -f "$ROOT_DIR/.env" ]]; then
   COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/local.sh" status >/dev/null
+  "${ROOT_DIR}/scripts/models.sh" check >/dev/null
   "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core >/dev/null
   if [[ -n "$(env_value_from REMOTE_HOST "$ROOT_DIR/.env")" && -n "$(env_value_from REMOTE_DIR "$ROOT_DIR/.env")" ]]; then
     "${ROOT_DIR}/scripts/remote.sh" tunnel --dry-run >/dev/null
@@ -357,7 +367,7 @@ bundles:
         sha256: $hf_sha
 EOF
 set +e
-old_schema_output="$(CATALOG_FILE="$old_schema_catalog" "${ROOT_DIR}/scripts/models.sh" plan old-schema --profile "$hf_profile" 2>&1 >/dev/null)"
+old_schema_output="$(CATALOG_FILE="$old_schema_catalog" "${ROOT_DIR}/scripts/models.sh" check 2>&1 >/dev/null)"
 old_schema_status=$?
 set -e
 if [[ "$old_schema_status" -ne 2 ]]; then
@@ -385,7 +395,7 @@ bundles:
           sha256: $civitai_sha
 EOF
 set +e
-bad_civitai_url_output="$(CATALOG_FILE="$bad_civitai_url_catalog" "${ROOT_DIR}/scripts/models.sh" plan bad-url --profile "$civitai_profile" 2>&1 >/dev/null)"
+bad_civitai_url_output="$(CATALOG_FILE="$bad_civitai_url_catalog" "${ROOT_DIR}/scripts/models.sh" check 2>&1 >/dev/null)"
 bad_civitai_url_status=$?
 set -e
 if [[ "$bad_civitai_url_status" -ne 2 ]]; then
@@ -414,7 +424,7 @@ bundles:
           size_bytes: nope
 EOF
 set +e
-bad_size_output="$(CATALOG_FILE="$bad_size_catalog" "${ROOT_DIR}/scripts/models.sh" plan bad-size --profile "$civitai_profile" 2>&1 >/dev/null)"
+bad_size_output="$(CATALOG_FILE="$bad_size_catalog" "${ROOT_DIR}/scripts/models.sh" check 2>&1 >/dev/null)"
 bad_size_status=$?
 set -e
 if [[ "$bad_size_status" -ne 2 ]]; then
@@ -434,6 +444,7 @@ COMFY_PORT=18188
 COMFY_OUTPUT_ROOT=/tmp/comfy-shell-missing-model-output
 EOF
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
+"${ROOT_DIR}/scripts/models.sh" check >/dev/null
 set +e
 missing_model_output="$("${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$missing_model_profile" 2>&1)"
 missing_model_status=$?
@@ -450,6 +461,7 @@ expect_status 2 "${ROOT_DIR}/scripts/remote.sh" bootstrap --profile "$contract_p
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile "$contract_profile"
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile "$contract_tmp_dir/missing.env" --dry-run
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models plan retro-anime-photo-core --profile "$contract_profile"
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" check retro-anime-photo-core
 ssh_stub_dir="$contract_tmp_dir/bin"
 ssh_argv_file="$contract_tmp_dir/ssh-argv.txt"
 mkdir -p "$ssh_stub_dir"
@@ -458,6 +470,11 @@ cat >"$ssh_stub_dir/ssh" <<'EOF'
 printf '%s\n' "$@" >"$COMFY_SHELL_SSH_ARGV_FILE"
 EOF
 chmod +x "$ssh_stub_dir/ssh"
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" check >/dev/null
+if ! grep -Fxq 'cd /tmp/comfy-shell-remote && ./scripts/models.sh check' "$ssh_argv_file"; then
+  die "remote.sh models check did not build the expected remote models.sh command" 1
+fi
 COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
   "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" plan retro-anime-photo-core >/dev/null
 if ! grep -Fxq 'verify@example.com' "$ssh_argv_file"; then

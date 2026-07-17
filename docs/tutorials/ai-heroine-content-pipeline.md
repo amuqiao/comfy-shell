@@ -818,10 +818,11 @@ full body fashion pose, the woman slowly turns around, gentle hair movement, smo
 探索变装、试穿、动作控制、LoRA
 ```
 
-这时再看模型包命令。`list` 只读取 catalog；`plan` 需要 `.env` 或
-`--profile FILE` 中有 `COMFY_MODEL_ROOT`：
+这时再看模型包命令。`check` 只校验 catalog schema；`list` 只读取 catalog；
+`plan` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`：
 
 ```bash
+./scripts/models.sh check
 ./scripts/models.sh list
 ./scripts/models.sh plan heroine-i2v-core
 ```

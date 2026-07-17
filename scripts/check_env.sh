@@ -54,7 +54,6 @@ usage() {
 常用示例:
   ./scripts/check_env.sh
   ./scripts/check_env.sh --no-network
-  ./scripts/check_env.sh --profile .env.example
 
 Exit Codes:
   0  必要基础项就绪,可能仍有 WARN/PENDING。

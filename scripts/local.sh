@@ -90,7 +90,7 @@ usage() {
 
 常用示例:
   UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
-  ./scripts/local.sh bootstrap --profile .env.example
+  ./scripts/local.sh bootstrap
   ./scripts/local.sh start
   ./scripts/local.sh status
   ./scripts/local.sh logs
@@ -142,7 +142,6 @@ PyTorch wheel 源示例:
   会访问网络并写入 .venv、.run/、logs/。不会下载模型,不会启动 ComfyUI。
 
 常用示例:
-  ./scripts/local.sh bootstrap --profile .env.example
   ./scripts/local.sh bootstrap
   UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple ./scripts/local.sh bootstrap
 EOF
@@ -173,7 +172,6 @@ EOF
 
 常用示例:
   ./scripts/local.sh start
-  ./scripts/local.sh start --profile .env.example
   ./scripts/local.sh status
 EOF
       ;;
@@ -193,7 +191,6 @@ EOF
 
 常用示例:
   ./scripts/local.sh stop
-  ./scripts/local.sh stop --profile .env.example
 EOF
       ;;
     restart)
@@ -207,7 +204,6 @@ EOF
 
 常用示例:
   ./scripts/local.sh restart
-  ./scripts/local.sh restart --profile .env.example
 EOF
       ;;
     status)
@@ -221,7 +217,6 @@ EOF
 
 常用示例:
   ./scripts/local.sh status
-  ./scripts/local.sh status --profile .env.example
 EOF
       ;;
     logs)

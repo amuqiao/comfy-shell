@@ -23,7 +23,7 @@ usage() {
   ./scripts/remote.sh restart --yes [options]
   ./scripts/remote.sh status [options]
   ./scripts/remote.sh logs [--tail N|all] [--follow] [options]
-  ./scripts/remote.sh models [options] <list|status|verify|plan|download|logs> [bundle]
+  ./scripts/remote.sh models [options] <check|list|status|verify|plan|download|logs> [bundle]
   ./scripts/remote.sh ready [--url URL] [options]
   ./scripts/remote.sh tunnel [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run] [options]
   ./scripts/remote.sh gpu [--connect-timeout SECONDS] [--json] [options]
@@ -55,7 +55,7 @@ usage() {
   bootstrap --yes 会在远端写 .venv、.run/、logs/ 并访问 Python 包索引。
   start/stop/restart --yes 会在远端启动或停止 ComfyUI 进程。
   models download 会在远端 COMFY_MODEL_ROOT 写模型文件; --detach 会写 .run/ 和 logs/。
-  status/logs/ready/gpu 和 models list/status/verify/plan/logs 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
+  status/logs/ready/gpu 和 models check/list/status/verify/plan/logs 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
 
 输出:
   stdout 输出命令、远端脚本结果、日志、健康检查 HTTP code、隧道命令或 GPU 状态。
@@ -70,6 +70,7 @@ usage() {
   ./scripts/remote.sh restart --yes
   ./scripts/remote.sh stop --yes
   ./scripts/remote.sh status
+  ./scripts/remote.sh models check
   ./scripts/remote.sh models plan retro-anime-photo-core
   ./scripts/remote.sh models download retro-anime-photo-core --detach
   ./scripts/remote.sh models logs retro-anime-photo-core --follow
@@ -202,6 +203,7 @@ EOF
 usage_models() {
   cat <<'EOF'
 用法:
+  ./scripts/remote.sh models [options] check
   ./scripts/remote.sh models [options] list
   ./scripts/remote.sh models [options] status [bundle]
   ./scripts/remote.sh models [options] verify [bundle]
@@ -221,7 +223,7 @@ usage_models() {
   不透传远端 models.sh --profile; 如需改变远端 COMFY_MODEL_ROOT, 修改远端 .env。
 
 远端动作:
-  cd REMOTE_DIR && ./scripts/models.sh <list|status|verify|plan|download> [bundle]
+  cd REMOTE_DIR && ./scripts/models.sh <check|list|status|verify|plan|download> [bundle]
 
 边界:
   remote.sh models 是远端模型操作入口, 只负责 SSH 和远端 checkout 定位。
@@ -230,12 +232,13 @@ usage_models() {
   workflow 文件解析请在本机使用 ./scripts/models.sh inspect。
 
 副作用:
-  list/status/verify/plan/logs 只读。
+  check/list/status/verify/plan/logs 只读。
   download 会在远端 COMFY_MODEL_ROOT 写模型文件, 不启动或停止 ComfyUI。
   download --detach 会在远端后台运行, 写 .run/models-download-<bundle>.pid
   和 logs/models-download-<bundle>.log。
 
 常用示例:
+  ./scripts/remote.sh models check
   ./scripts/remote.sh models list
   ./scripts/remote.sh models plan retro-anime-photo-core
   ./scripts/remote.sh models status retro-anime-photo-core
@@ -841,7 +844,7 @@ case "$cmd" in
             usage_models
             exit 0
             ;;
-          list|status|verify|plan|download|logs)
+          check|list|status|verify|plan|download|logs)
             models_command="$1"
             shift
             ;;
@@ -898,6 +901,9 @@ case "$cmd" in
     case "$models_command" in
       list)
         [[ -z "$models_bundle" ]] || usage_error "models list takes no bundle argument" usage_models
+        ;;
+      check)
+        [[ -z "$models_bundle" ]] || usage_error "models check takes no bundle argument" usage_models
         ;;
       status|verify) ;;
       plan|download)

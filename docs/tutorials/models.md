@@ -145,13 +145,16 @@ ComfyUI/models/upscale_models/     放大模型
 ./scripts/models.sh inspect '.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png'
 ```
 
-只读查看。`list` 只读取 catalog；`status`、`verify`、`plan` 和 `download` 需要 `.env` 或 `--profile FILE` 中有 `COMFY_MODEL_ROOT`：
+只读查看。`check` 只校验 catalog schema；`list` 只读取 catalog；`status`、`verify`、`plan` 和 `download` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`。
+
+`.env.example` 只是复制生成 `.env` 的模板，不作为运行 profile：
 
 ```bash
+./scripts/models.sh check
 ./scripts/models.sh list
-./scripts/models.sh plan retro-anime-photo-core --profile .env.example
-./scripts/models.sh status retro-anime-photo-core --profile .env.example
-./scripts/models.sh verify retro-anime-photo-core --profile .env.example
+./scripts/models.sh plan retro-anime-photo-core
+./scripts/models.sh status retro-anime-photo-core
+./scripts/models.sh verify retro-anime-photo-core
 ```
 
 显式下载：

@@ -39,7 +39,8 @@ cp .env.example .env
 
 `.env.example` keeps one concrete server CUDA example plus commented macOS
 overrides. Edit `.env` for the machine you are running on before lifecycle
-commands.
+commands. Treat `.env.example` as a copy/edit template, not as a runtime
+`--profile` target.
 
 Scripts read `.env` by default. Process environment variables override `.env`
 values. Use `--profile FILE` only when you intentionally want a one-command
