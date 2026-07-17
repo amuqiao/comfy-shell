@@ -34,7 +34,7 @@ check 会执行:
   4. scripts 入口和子命令 help smoke
   5. 不联网、不启动服务的只读 smoke
   6. 默认 .env / 显式 --profile / 环境变量覆盖合同 smoke
-  7. models catalog、status、download、upload 合同 smoke
+  7. models catalog、inventory、catalog-status、download、upload 合同 smoke
   8. remote.sh 远程命令拼装、detach、logs、upload-file 合同 smoke
   9. git diff --check
 

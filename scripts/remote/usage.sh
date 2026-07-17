@@ -15,7 +15,7 @@ usage() {
   ./scripts/remote.sh restart --yes [options]
   ./scripts/remote.sh status [options]
   ./scripts/remote.sh logs [--tail N|all] [--follow] [options]
-  ./scripts/remote.sh models [options] <check|list|list-models|status|verify|plan|download|upload|upload-file|logs> [...]
+  ./scripts/remote.sh models [options] <check|list|list-models|inventory|catalog-status|status|verify|plan|download|upload|upload-file|logs> [...]
   ./scripts/remote.sh ready [--url URL] [options]
   ./scripts/remote.sh tunnel [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run] [options]
   ./scripts/remote.sh gpu [--connect-timeout SECONDS] [--json] [options]
@@ -47,7 +47,7 @@ usage() {
   bootstrap --yes 会在远端写 .venv、.run/、logs/ 并访问 Python 包索引。
   start/stop/restart --yes 会在远端启动或停止 ComfyUI 进程。
   models download/upload 会在远端 COMFY_MODEL_ROOT 写模型文件; --detach 会写 .run/ 和 logs/。
-  status/logs/ready/gpu 和 models check/list/status/verify/plan/logs 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
+  status/logs/ready/gpu 和 models check/list/inventory/catalog-status/verify/plan/logs 只读; tunnel 只占用本地端口并保持 SSH 前台进程。
 
 输出:
   stdout 输出命令、远端脚本结果、日志、健康检查 HTTP code、隧道命令或 GPU 状态。
@@ -65,7 +65,7 @@ usage() {
   ./scripts/remote.sh models check
   ./scripts/remote.sh models list-models retro-anime-photo-core
   ./scripts/remote.sh models plan retro-anime-photo-core
-  ./scripts/remote.sh models status --model isabelia-v10-checkpoint
+  ./scripts/remote.sh models catalog-status --model isabelia-v10-checkpoint
   ./scripts/remote.sh models download retro-anime-photo-core --detach
   ./scripts/remote.sh models upload --model isabelia-v10-checkpoint
   ./scripts/remote.sh models logs retro-anime-photo-core --follow
@@ -201,7 +201,9 @@ usage_models() {
   ./scripts/remote.sh models [options] check
   ./scripts/remote.sh models [options] list
   ./scripts/remote.sh models [options] list-models [bundle]
-  ./scripts/remote.sh models [options] status [bundle|--model MODEL_ID]
+  ./scripts/remote.sh models [options] inventory [--all]
+  ./scripts/remote.sh models [options] catalog-status [bundle|--model MODEL_ID]
+  ./scripts/remote.sh models [options] status [bundle|--model MODEL_ID]  # compatibility alias
   ./scripts/remote.sh models [options] verify [bundle|--model MODEL_ID]
   ./scripts/remote.sh models [options] plan <bundle|--model MODEL_ID>
   ./scripts/remote.sh models [options] download <bundle|--model MODEL_ID> [--detach]
@@ -221,18 +223,20 @@ usage_models() {
   不透传远端 models.sh --profile; 如需改变远端 COMFY_MODEL_ROOT, 修改远端 .env。
 
 远端动作:
-  cd REMOTE_DIR && ./scripts/models.sh <check|list|list-models|status|verify|plan|download|info|install-upload> [...]
+  cd REMOTE_DIR && ./scripts/models.sh <check|list|list-models|inventory|catalog-status|verify|plan|download|info|install-upload> [...]
 
 边界:
   remote.sh models 是远端模型操作入口, 只负责 SSH 和远端 checkout 定位。
   模型清单、hash、下载和 COMFY_MODEL_ROOT 由远端 ./scripts/models.sh 负责。
+  catalog-status 对账 catalog 声明项; inventory 只扫描远端 COMFY_MODEL_ROOT 实际文件。
+  status 是 catalog-status 的兼容别名。
   upload --model 从本机 COMFY_MODEL_ROOT 读取已校验文件, 上传到远端 COMFY_MODEL_ROOT。
   upload-file 不依赖 catalog, 从本机任意 FILE 上传到远端 COMFY_MODEL_ROOT/MODEL_DIR/FILENAME。
   不支持远端 inspect, 也不代理远端 models.sh 子命令帮助。
   workflow 文件解析请在本机使用 ./scripts/models.sh inspect。
 
 副作用:
-  check/list/status/verify/plan/logs 只读。
+  check/list/inventory/catalog-status/status/verify/plan/logs 只读。
   download 会在远端 COMFY_MODEL_ROOT 写模型文件, 不启动或停止 ComfyUI。
   download --detach 会在远端后台运行, 写 .run/models-download-<bundle>.pid
   或 .run/models-download-model-<id>.pid, 以及对应 logs/*.log。
@@ -244,8 +248,10 @@ usage_models() {
   ./scripts/remote.sh models list
   ./scripts/remote.sh models list-models retro-anime-photo-core
   ./scripts/remote.sh models plan retro-anime-photo-core
-  ./scripts/remote.sh models status --model isabelia-v10-checkpoint
-  ./scripts/remote.sh models status retro-anime-photo-core
+  ./scripts/remote.sh models inventory
+  ./scripts/remote.sh models inventory --all
+  ./scripts/remote.sh models catalog-status --model isabelia-v10-checkpoint
+  ./scripts/remote.sh models catalog-status retro-anime-photo-core
   ./scripts/remote.sh models verify retro-anime-photo-core
   ./scripts/remote.sh models download --model isabelia-v10-checkpoint --detach
   ./scripts/remote.sh models download retro-anime-photo-core --detach

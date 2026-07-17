@@ -91,10 +91,18 @@ plan
   -> download.mode=manual 显示 manual 和 source page/target
   -> download.mode=blocked 显示 blocked 和阻塞原因
 
-status
-  -> 只读盘点 COMFY_MODEL_ROOT 中的模型现状
+inventory
+  -> 只读扫描 COMFY_MODEL_ROOT 中实际存在的模型文件
+  -> 按模型目录汇总数量、大小和文件名
+  -> 默认隐藏 ComfyUI 的 put_*_here 占位文件和 configs/*.yaml 支持配置
+  -> 使用 --all 查看完整原始文件列表
+  -> 不读取 catalog, 不判断来源, 不校验 hash
+
+catalog-status
+  -> 只读对账 catalog 声明模型在 COMFY_MODEL_ROOT 中的状态
   -> 不传 bundle 时检查全部 bundle, 并按 directory/filename 去重
   -> 输出 summary、missing、manual、blocked、bad、conflict 等分组
+  -> 不扫描 catalog 之外的磁盘文件
 
 verify
   -> 严格检查文件存在且 sha256 正确
@@ -155,7 +163,7 @@ ComfyUI/models/upscale_models/     放大模型
 ./scripts/models.sh inspect '.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png'
 ```
 
-只读查看。`check` 只校验 catalog schema；`list` 只读取 bundle；`list-models` 列出模型 id 和 target；`plan` 解释 catalog；`status` 盘点模型目录；`verify` 做严格校验；`download` 只下载可自动下载的条目；`info` 输出单模型 path/hash，主要给上传链路核对。`status`、`verify`、`plan`、`download` 和 `info` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`。
+只读查看。`check` 只校验 catalog schema；`list` 只读取 bundle；`list-models` 列出模型 id 和 target；`plan` 解释 catalog；`inventory` 扫描磁盘实际模型文件，默认隐藏占位文件和支持配置；`catalog-status` 对账 catalog 声明项；`verify` 做严格校验；`download` 只下载可自动下载的条目；`info` 输出单模型 path/hash，主要给上传链路核对。`inventory`、`catalog-status`、`verify`、`plan`、`download` 和 `info` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`。
 如果只想处理单个模型，使用 catalog 里的稳定 `id`，不要按页面显示名或文件名模糊匹配。
 
 `.env.example` 只是复制生成 `.env` 的模板，不作为运行 profile：
@@ -166,9 +174,11 @@ ComfyUI/models/upscale_models/     放大模型
 ./scripts/models.sh list-models retro-anime-photo-core
 ./scripts/models.sh plan retro-anime-photo-core
 ./scripts/models.sh plan --model isabelia-v10-checkpoint
-./scripts/models.sh status
-./scripts/models.sh status retro-anime-photo-core
-./scripts/models.sh status --model isabelia-v10-checkpoint
+./scripts/models.sh inventory
+./scripts/models.sh inventory --all
+./scripts/models.sh catalog-status
+./scripts/models.sh catalog-status retro-anime-photo-core
+./scripts/models.sh catalog-status --model isabelia-v10-checkpoint
 ./scripts/models.sh verify retro-anime-photo-core
 ```
 
@@ -198,7 +208,7 @@ failed: 0
 Next:
   1. 按 manual 列表打开 source page 下载
   2. 放到 target 路径
-  3. 重新执行 status 或 verify
+  3. 重新执行 catalog-status 或 verify
 ```
 
 注意：

@@ -38,8 +38,12 @@ def run_read_only(ctx) -> None:
     if "Traceback" in bad.stderr or "Traceback" in bad.stdout:
         die("models.sh inspect bad workflow printed Python traceback", 1)
 
+    read_only_model_root = ctx.tmp_dir / "read-only-models"
+    (read_only_model_root / "loras").mkdir(parents=True, exist_ok=True)
+    (read_only_model_root / "loras/read-only.safetensors").write_bytes(b"read-only-model")
     read_only_model_profile = ctx.tmp_dir / "read-only-model-profile.env"
-    write_text(read_only_model_profile, "COMFY_MODEL_ROOT=/tmp/comfy-shell-read-only-models\n")
+    write_text(read_only_model_profile, f"COMFY_MODEL_ROOT={read_only_model_root}\n")
+    run([ROOT_DIR / "scripts/models.sh", "inventory", "--profile", read_only_model_profile], stdout=subprocess.DEVNULL)
     run([ROOT_DIR / "scripts/models.sh", "plan", "heroine-i2v-core", "--profile", read_only_model_profile], stdout=subprocess.DEVNULL)
     run([ROOT_DIR / "scripts/models.sh", "plan", "retro-anime-photo-core", "--profile", read_only_model_profile], stdout=subprocess.DEVNULL)
     run(
@@ -80,7 +84,7 @@ def run_read_only(ctx) -> None:
         2,
         [
             ROOT_DIR / "scripts/models.sh",
-            "status",
+            "catalog-status",
             "--model",
             "isabelia-v10-checkpoint",
             "--model",
@@ -94,6 +98,7 @@ def run_read_only(ctx) -> None:
     expect_status(2, [ROOT_DIR / "scripts/models.sh", "check", "retro-anime-photo-core"])
     expect_status(2, [ROOT_DIR / "scripts/models.sh", "list", "--profile", read_only_model_profile])
     expect_status(2, [ROOT_DIR / "scripts/models.sh", "list-models", "--profile", read_only_model_profile])
+    expect_status(2, [ROOT_DIR / "scripts/models.sh", "inventory", "retro-anime-photo-core", "--profile", read_only_model_profile])
 
     run(
         [

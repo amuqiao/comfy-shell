@@ -10,7 +10,7 @@
 check_env.sh            只读环境体检
 local.sh                  本机 ComfyUI 环境准备和进程生命周期
 nodes.sh                ComfyUI-Manager 依赖状态和安装
-models.sh               当前机器模型 catalog 校验、清单查看、模型校验和显式下载
+models.sh               当前机器模型 catalog 校验、磁盘清单、catalog 对账、模型校验和显式下载
 remote.sh               远端项目 checkout 编排、远端模型委派、隧道和 GPU 诊断
 verify.sh               scripts 最小可重复校验
 ```
@@ -24,7 +24,8 @@ verify.sh               scripts 最小可重复校验
 scripts/models.sh           只定位 Python、展示 shell 层帮助、转发到 Python CLI
 scripts/models/cli.py       models.sh 的命令分发
 scripts/models/catalog.py   catalog schema、bundle/model selector、source/download 元信息
-scripts/models/status.py    status/verify 状态计算和人读输出
+scripts/models/status.py    catalog-status/verify 状态计算和人读输出
+scripts/models/inventory.py COMFY_MODEL_ROOT 磁盘清单扫描和人读输出
 scripts/models/plan.py      plan/info 输出
 scripts/models/workflow.py  PNG/JSON workflow 模型引用解析
 scripts/models/download.py  auto 下载、hash 校验、upload install 落位
@@ -146,10 +147,12 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；默认目标来自 `.env` 的 `REMOTE_HOST` / `REMOTE_DIR`。
   `remote.sh status/ready/logs` 只读查看远端状态。
-- `remote.sh models [options] <check|list|list-models|status|verify|plan|download|upload|upload-file|logs>` 会通过 SSH
+- `remote.sh models [options] <check|list|list-models|inventory|catalog-status|status|verify|plan|download|upload|upload-file|logs>` 会通过 SSH
   进入远端 checkout 并调用远端 `./scripts/models.sh ...`。其中 `download` 会在
   远端 `COMFY_MODEL_ROOT` 写模型文件；模型清单、hash 和目标目录仍由远端
-  `models.sh` 负责。`download --detach` 会在远端后台运行, 写
+  `models.sh` 负责。`catalog-status` 只对账 catalog 声明项，`inventory` 只扫描远端
+  `COMFY_MODEL_ROOT` 实际文件，默认隐藏占位文件和支持配置；`status` 是 `catalog-status` 的兼容别名。
+  `download --detach` 会在远端后台运行, 写
   `.run/models-download-<bundle>.pid` 和 `logs/models-download-<bundle>.log`。
   `download --model MODEL_ID --detach` 会写
   `.run/models-download-model-<id>.pid` 和 `logs/models-download-model-<id>.log`。
@@ -167,6 +170,9 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 ./scripts/remote.sh models check
 ./scripts/remote.sh models list-models retro-anime-photo-core
 ./scripts/remote.sh models plan retro-anime-photo-core
+./scripts/remote.sh models inventory
+./scripts/remote.sh models inventory --all
+./scripts/remote.sh models catalog-status retro-anime-photo-core
 ./scripts/remote.sh models download --model isabelia-v10-checkpoint --detach
 ./scripts/remote.sh models upload --model isabelia-v10-checkpoint
 ./scripts/remote.sh models upload-file --file ./ComfyUI/models/vae/kl-f8-anime2.ckpt --to vae

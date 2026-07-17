@@ -184,6 +184,7 @@ handle_remote_models() {
   models_file=""
   models_to=""
   models_name=""
+  models_all=false
   models_detach=false
   models_tail=""
   models_follow=false
@@ -195,7 +196,7 @@ handle_remote_models() {
           usage_models
           exit 0
           ;;
-        check|list|list-models|status|verify|plan|download|upload|upload-file|logs)
+        check|list|list-models|inventory|catalog-status|status|verify|plan|download|upload|upload-file|logs)
           models_command="$1"
           shift
           ;;
@@ -224,9 +225,14 @@ handle_remote_models() {
         models_detach=true
         shift
         ;;
+      --all)
+        [[ "$models_command" == "inventory" ]] || usage_error "--all is only supported for models inventory" usage_models
+        models_all=true
+        shift
+        ;;
       --model)
         case "$models_command" in
-          status|verify|plan|download|upload|logs)
+          catalog-status|status|verify|plan|download|upload|logs)
             [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--model requires a model id" usage_models
             [[ -z "$models_model" ]] || usage_error "remote models accepts at most one --model" usage_models
             models_model="$2"
@@ -296,7 +302,11 @@ handle_remote_models() {
       [[ -z "$models_bundle" ]] || usage_error "models check takes no bundle argument" usage_models
       [[ -z "$models_model" ]] || usage_error "models check does not support --model" usage_models
       ;;
-    status|verify) ;;
+    inventory)
+      [[ -z "$models_bundle" ]] || usage_error "models inventory takes no bundle argument" usage_models
+      [[ -z "$models_model" ]] || usage_error "models inventory does not support --model" usage_models
+      ;;
+    catalog-status|status|verify) ;;
     plan|download)
       [[ -n "$models_bundle" || -n "$models_model" ]] || usage_error "models ${models_command} requires one bundle or --model MODEL_ID" usage_models
       ;;
@@ -440,6 +450,9 @@ handle_remote_models() {
     fi
     if [[ -n "$models_model" ]]; then
       remote_models_args+=(--model "$models_model")
+    fi
+    if [[ "$models_all" == true ]]; then
+      remote_models_args+=(--all)
     fi
     print_remote_plan \
       "models ${models_command}" \

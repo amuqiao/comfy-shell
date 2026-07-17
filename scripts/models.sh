@@ -17,17 +17,20 @@ usage() {
   ./scripts/models.sh list
   ./scripts/models.sh list-models [bundle]
   ./scripts/models.sh inspect <workflow.png|workflow.json>
-  ./scripts/models.sh status [bundle|--model MODEL_ID] [--profile FILE]
+  ./scripts/models.sh inventory [--all] [--profile FILE]
+  ./scripts/models.sh catalog-status [bundle|--model MODEL_ID] [--profile FILE]
   ./scripts/models.sh verify [bundle|--model MODEL_ID] [--profile FILE]
   ./scripts/models.sh plan <bundle|--model MODEL_ID> [--profile FILE]
   ./scripts/models.sh download <bundle|--model MODEL_ID> [--profile FILE]
   ./scripts/models.sh info --model MODEL_ID [--profile FILE]
   ./scripts/models.sh install-upload --model MODEL_ID --file FILE [--profile FILE]
+  ./scripts/models.sh status [bundle|--model MODEL_ID] [--profile FILE]  # compatibility alias
   ./scripts/models.sh -h|--help
 
 作用域:
   可选的 ComfyUI 模型资产入口。读取 configs/models/catalog.yaml, 列出教程模型包,
-  检查本地文件, 校验 hash, 预览下载计划, 并在用户显式执行时下载支持自动下载的模型。
+  对账 catalog 声明项与本地文件, 扫描已安装模型, 校验 hash, 预览下载计划,
+  并在用户显式执行时下载支持自动下载的模型。
 
 不负责:
   不参与 local.sh bootstrap, 不自动下载模型, 不删除模型文件, 不安装 third-party custom_nodes,
@@ -35,9 +38,10 @@ usage() {
 
 运行环境:
   Requires: Bash, 仓库根目录 .venv/bin/python
-  check/list/list-models/status/verify/plan/download/info/install-upload 需要 .venv 中可 import PyYAML。
+  check/list/list-models/catalog-status/verify/plan/download/info/install-upload 需要 .venv 中可 import PyYAML。
   check 只校验 catalog schema, 不读取 .env, 不检查模型文件, 不访问网络。
   inspect 只解析 PNG/JSON workflow metadata, 不访问网络, 不猜下载源。
+  inventory 只扫描 COMFY_MODEL_ROOT, 不读取 catalog, 不校验 hash, 不访问网络。
   download.method=huggingface 需要 hf CLI; 优先使用 .venv/bin/hf, 其次使用 HF_CLI 或 PATH 中的 hf。
   download.method=civitai 使用 catalog 中的 Civitai API download URL。
   download.mode=manual 的条目只展示 source page、target 和原因, 不会自动下载。
@@ -50,17 +54,19 @@ usage() {
   list                列出 catalog 中的 bundle
   list-models [bundle] 列出 catalog 中的模型 id 和 target
   inspect <file>      从 PNG/workflow JSON 提取模型引用
-  status [bundle]     盘点 COMFY_MODEL_ROOT 中 catalog 声明的模型现状
+  inventory           扫描 COMFY_MODEL_ROOT 中实际存在的模型文件
+  catalog-status [bundle] 对账 catalog 声明模型在 COMFY_MODEL_ROOT 中的状态
   plan <bundle>       解释 catalog 中这个 bundle 应准备什么
   verify [bundle]     严格校验模型是否可复现
   download <bundle>   显式下载 bundle 中的模型文件
   info --model MODEL_ID 输出单模型 path/hash 信息
   install-upload       校验上传临时文件后安装到 target, 通常由 remote.sh 调用
+  status              兼容别名, 等价于 catalog-status; 新命令请使用 catalog-status
   help                显示本帮助
 
 配置与环境变量:
-  status/verify/plan/download/info/install-upload 默认读取仓库根目录 .env。
-  --profile FILE      status/verify/plan/download/info/install-upload 可显式指定其他配置文件。
+  inventory/catalog-status/verify/plan/download/info/install-upload 默认读取仓库根目录 .env。
+  --profile FILE      inventory/catalog-status/verify/plan/download/info/install-upload 可显式指定其他配置文件。
   .env.example        只是配置示例; 运行配置默认真源是 .env。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
   HF_ENDPOINT         可选; 只影响 download.method=huggingface。示例: https://hf-mirror.com
@@ -69,7 +75,7 @@ usage() {
   HF_CLI              可选, 覆盖 hf CLI 路径
 
 副作用与保护边界:
-  check/list/list-models/inspect/status/verify/plan/info 只读, 不访问网络。
+  check/list/list-models/inspect/inventory/catalog-status/verify/plan/info 只读, 不访问网络。
   download 会创建模型子目录并写 auto 模型文件; 写入 COMFY_MODEL_ROOT 下的模型资产目录。
   manual/blocked 条目会跳过并输出下一步提示, 不会导致整个 download 提前中断。
   hash 不匹配、已有目标文件 hash 错误或网络下载失败时标记 failed, 不覆盖。
@@ -90,8 +96,9 @@ usage() {
   ./scripts/models.sh list
   ./scripts/models.sh list-models retro-anime-photo-core
   # 下方命令前提: .env 已配置 COMFY_MODEL_ROOT
-  ./scripts/models.sh status retro-anime-photo-core
-  ./scripts/models.sh status --model isabelia-v10-checkpoint
+  ./scripts/models.sh inventory
+  ./scripts/models.sh catalog-status retro-anime-photo-core
+  ./scripts/models.sh catalog-status --model isabelia-v10-checkpoint
   ./scripts/models.sh plan retro-anime-photo-core
   ./scripts/models.sh download --model isabelia-v10-checkpoint
   ./scripts/models.sh verify --model isabelia-v10-checkpoint
@@ -101,7 +108,7 @@ usage() {
 
 Exit Codes:
   0  成功
-  1  status/verify 检查发现 missing、manual、blocked、bad、conflict 或未验证文件
+  1  catalog-status/verify 检查发现 missing、manual、blocked、bad、conflict 或未验证文件
   2  缺少 command、非法参数、catalog 缺失、Python/PyYAML/hf 缺失
   4  auto 下载运行失败
 EOF
@@ -169,16 +176,44 @@ EOF
   ./scripts/models.sh inspect .data/nodes/workflow.png
 EOF
       ;;
-    status)
+    inventory)
       cat <<'EOF'
 用法:
-  ./scripts/models.sh status [bundle|--model MODEL_ID] [--profile FILE]
-  ./scripts/models.sh status -h|--help
+  ./scripts/models.sh inventory [--all] [--profile FILE]
+  ./scripts/models.sh inventory -h|--help
 
 作用域:
-  盘点 catalog 声明的模型在 COMFY_MODEL_ROOT 中的当前状态。
+  扫描 COMFY_MODEL_ROOT 中实际存在的模型文件, 按模型目录汇总数量、大小和文件名。
+  默认隐藏 ComfyUI 的 put_*_here 占位文件和 configs/*.yaml 支持配置。
+  inventory 不读取 catalog, 不判断来源, 不校验 hash, 不修复目录, 不访问网络。
+
+配置:
+  默认读取 .env; --profile FILE 可显式指定其他配置文件。
+  .env.example 只是配置示例, 不是默认运行配置。
+  COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
+
+选项:
+  --all               显示占位文件和支持配置。
+
+常用示例:
+  ./scripts/models.sh inventory
+  ./scripts/models.sh inventory --all
+EOF
+      ;;
+    catalog-status|status)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh catalog-status [bundle|--model MODEL_ID] [--profile FILE]
+  ./scripts/models.sh catalog-status -h|--help
+
+兼容:
+  ./scripts/models.sh status [bundle|--model MODEL_ID] [--profile FILE]
+
+作用域:
+  对账 catalog 声明的模型在 COMFY_MODEL_ROOT 中的当前状态。
   不传 bundle 时检查全部 bundle, 并按 directory/filename 去重。
   有 sha256 时会校验 hash; manual/blocked 会显示原因、target 和建议动作。
+  catalog-status 不扫描 catalog 之外的磁盘文件; 要看磁盘实际清单请用 inventory。
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
@@ -186,9 +221,9 @@ EOF
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
 
 常用示例:
-  ./scripts/models.sh status
-  ./scripts/models.sh status heroine-i2v-core
-  ./scripts/models.sh status --model isabelia-v10-checkpoint
+  ./scripts/models.sh catalog-status
+  ./scripts/models.sh catalog-status heroine-i2v-core
+  ./scripts/models.sh catalog-status --model isabelia-v10-checkpoint
 EOF
       ;;
     verify)
@@ -219,7 +254,7 @@ EOF
 
 作用域:
   解释 catalog: 输出 target、source、download.mode; auto 条目会输出 download.method, 不访问网络。
-  plan 不检查文件是否已经存在; 要看磁盘现状请用 status。
+  plan 不检查文件是否已经存在; 要看 catalog 对账状态请用 catalog-status; 要看磁盘实际清单请用 inventory。
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
@@ -294,7 +329,7 @@ case "$command" in
   -h|--help|help)
     usage
     ;;
-  check|list|list-models|inspect|status|verify|plan|download|info|install-upload)
+  check|list|list-models|inspect|inventory|catalog-status|status|verify|plan|download|info|install-upload)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
       command_usage "$command"

@@ -200,12 +200,45 @@ def _run_models_command_contracts(stub_dir: Path, ssh_argv_file: Path, contract_
     _run_remote_with_stub(
         stub_dir,
         ssh_argv_file,
+        ["models", "--profile", contract_profile, "inventory"],
+    )
+    _contains_file_line(
+        ssh_argv_file,
+        "cd /tmp/comfy-shell-remote && ./scripts/models.sh inventory",
+        "remote.sh models did not build the expected remote models.sh inventory command",
+    )
+
+    _run_remote_with_stub(
+        stub_dir,
+        ssh_argv_file,
+        ["models", "--profile", contract_profile, "inventory", "--all"],
+    )
+    _contains_file_line(
+        ssh_argv_file,
+        "cd /tmp/comfy-shell-remote && ./scripts/models.sh inventory --all",
+        "remote.sh models did not forward inventory --all",
+    )
+
+    _run_remote_with_stub(
+        stub_dir,
+        ssh_argv_file,
+        ["models", "--profile", contract_profile, "catalog-status", "--model", "isabelia-v10-checkpoint"],
+    )
+    _contains_file_line(
+        ssh_argv_file,
+        "cd /tmp/comfy-shell-remote && ./scripts/models.sh catalog-status --model isabelia-v10-checkpoint",
+        "remote.sh models did not build the expected remote models.sh catalog-status --model command",
+    )
+
+    _run_remote_with_stub(
+        stub_dir,
+        ssh_argv_file,
         ["models", "--profile", contract_profile, "status", "--model", "isabelia-v10-checkpoint"],
     )
     _contains_file_line(
         ssh_argv_file,
         "cd /tmp/comfy-shell-remote && ./scripts/models.sh status --model isabelia-v10-checkpoint",
-        "remote.sh models did not build the expected remote models.sh --model command",
+        "remote.sh models did not preserve the remote models.sh status compatibility alias",
     )
 
     _run_remote_with_stub(

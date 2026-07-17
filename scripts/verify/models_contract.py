@@ -358,7 +358,7 @@ bundles:
         env={"CATALOG_FILE": duplicate_model_catalog},
     )
     duplicate_status = capture(
-        [ROOT_DIR / "scripts/models.sh", "status", "--model", "duplicate-model", "--profile", profile],
+        [ROOT_DIR / "scripts/models.sh", "catalog-status", "--model", "duplicate-model", "--profile", profile],
         env={"CATALOG_FILE": duplicate_model_catalog},
     )
     if duplicate_info.returncode != 2 or duplicate_status.returncode != 2:
@@ -412,7 +412,7 @@ bundles:
         env={"CATALOG_FILE": target_conflict_catalog},
     )
     target_status = capture(
-        [ROOT_DIR / "scripts/models.sh", "status", "--model", "target-model-a", "--profile", profile],
+        [ROOT_DIR / "scripts/models.sh", "catalog-status", "--model", "target-model-a", "--profile", profile],
         env={"CATALOG_FILE": target_conflict_catalog},
     )
     target_download = capture(
@@ -454,6 +454,15 @@ def _run_status_and_schema_smoke(ctx: VerifyContext) -> None:
     (status_smoke_root / "loras").mkdir(parents=True, exist_ok=True)
     ok_file = status_smoke_root / "checkpoints/ok.bin"
     ok_file.write_bytes(b"model-data")
+    inventory_file = status_smoke_root / "loras/inventory.safetensors"
+    inventory_file.write_bytes(b"inventory-model")
+    root_inventory_file = status_smoke_root / "root.bin"
+    root_inventory_file.write_bytes(b"root-model")
+    placeholder_file = status_smoke_root / "loras/put_loras_here"
+    placeholder_file.touch()
+    support_dir = status_smoke_root / "configs"
+    support_dir.mkdir(parents=True, exist_ok=True)
+    write_text(support_dir / "support.yaml", "model: support\n")
     status_ok_sha = sha256_file(ok_file)
     status_ok_size = file_size(ok_file)
     status_catalog = ctx.tmp_dir / "status-catalog.yaml"
@@ -523,15 +532,44 @@ bundles:
     )
     status_profile = ctx.tmp_dir / "status-profile.env"
     write_text(status_profile, f"COMFY_MODEL_ROOT={status_smoke_root}\n")
+    inventory_smoke = capture([ROOT_DIR / "scripts/models.sh", "inventory", "--profile", status_profile])
+    if inventory_smoke.returncode != 0:
+        print(inventory_smoke.stdout + inventory_smoke.stderr)
+        die(f"models.sh inventory smoke returned {inventory_smoke.returncode}, expected 0", 1)
+    for expected in ("模型根目录:", "摘要:", "模型清单:", "(root)", "root.bin", "loras", "inventory.safetensors", "占位文件: 1", "支持配置: 1"):
+        _contains(inventory_smoke.stdout + inventory_smoke.stderr, expected, f"models.sh inventory output missing: {expected}")
+    for hidden in ("put_loras_here", "support.yaml"):
+        if hidden in inventory_smoke.stdout + inventory_smoke.stderr:
+            die(f"models.sh inventory default output should hide: {hidden}", 1)
+
+    inventory_all = capture([ROOT_DIR / "scripts/models.sh", "inventory", "--all", "--profile", status_profile])
+    if inventory_all.returncode != 0:
+        print(inventory_all.stdout + inventory_all.stderr)
+        die(f"models.sh inventory --all returned {inventory_all.returncode}, expected 0", 1)
+    for expected in ("put_loras_here [占位]", "support.yaml [支持配置]"):
+        _contains(inventory_all.stdout + inventory_all.stderr, expected, f"models.sh inventory --all output missing: {expected}")
+
     status_smoke = capture(
-        [ROOT_DIR / "scripts/models.sh", "status", "--profile", status_profile],
+        [ROOT_DIR / "scripts/models.sh", "catalog-status", "--profile", status_profile],
         env={"CATALOG_FILE": status_catalog},
     )
     if status_smoke.returncode != 1:
         print(status_smoke.stdout + status_smoke.stderr)
-        die(f"models.sh status smoke returned {status_smoke.returncode}, expected 1", 1)
+        die(f"models.sh catalog-status smoke returned {status_smoke.returncode}, expected 1", 1)
     for expected in ("ok: 1", "missing: 1", "manual: 1", "blocked: 1", "total_unique: 4", "bundles: status-a, status-b"):
-        _contains(status_smoke.stdout + status_smoke.stderr, expected, f"models.sh status summary missing: {expected}")
+        _contains(status_smoke.stdout + status_smoke.stderr, expected, f"models.sh catalog-status summary missing: {expected}")
+    status_alias = capture(
+        [ROOT_DIR / "scripts/models.sh", "status", "--profile", status_profile],
+        env={"CATALOG_FILE": status_catalog},
+    )
+    if status_alias.returncode != 1:
+        print(status_alias.stdout + status_alias.stderr)
+        die(f"models.sh status alias returned {status_alias.returncode}, expected 1", 1)
+    _contains(
+        status_alias.stderr,
+        "status is deprecated; use catalog-status",
+        "models.sh status alias did not print deprecation warning",
+    )
 
     mixed_mode_catalog = ctx.tmp_dir / "mixed-mode-catalog.yaml"
     write_text(
@@ -568,18 +606,18 @@ bundles:
 """,
     )
     mixed_mode = capture(
-        [ROOT_DIR / "scripts/models.sh", "status", "--profile", status_profile],
+        [ROOT_DIR / "scripts/models.sh", "catalog-status", "--profile", status_profile],
         env={"CATALOG_FILE": mixed_mode_catalog},
     )
     if mixed_mode.returncode != 1:
         print(mixed_mode.stdout + mixed_mode.stderr)
-        die(f"models.sh status mixed-mode target returned {mixed_mode.returncode}, expected 1", 1)
+        die(f"models.sh catalog-status mixed-mode target returned {mixed_mode.returncode}, expected 1", 1)
     mixed_output = mixed_mode.stdout + mixed_mode.stderr
     for expected in ("conflict: 1", "download.mode differs:", "auto", "manual"):
-        _contains(mixed_output, expected, f"models.sh status mixed-mode output missing: {expected}")
+        _contains(mixed_output, expected, f"models.sh catalog-status mixed-mode output missing: {expected}")
     if "./scripts/models.sh download mixed-manual" in mixed_output:
         print(mixed_output)
-        die("models.sh status suggested downloading the manual bundle for mixed target", 1)
+        die("models.sh catalog-status suggested downloading the manual bundle for mixed target", 1)
 
     old_schema_catalog = ctx.tmp_dir / "old-schema-catalog.yaml"
     write_text(
@@ -759,5 +797,6 @@ def _run_missing_model_root_smoke(ctx: VerifyContext) -> None:
         die(f"models.sh plan without COMFY_MODEL_ROOT returned {missing_model.returncode}, expected 2", 1)
     if any(line.startswith("target:") for line in (missing_model.stdout + missing_model.stderr).splitlines()):
         die("models.sh plan without COMFY_MODEL_ROOT printed a target path", 1)
-    expect_status(2, [ROOT_DIR / "scripts/models.sh", "status", "--profile", missing_model_profile])
+    expect_status(2, [ROOT_DIR / "scripts/models.sh", "catalog-status", "--profile", missing_model_profile])
+    expect_status(2, [ROOT_DIR / "scripts/models.sh", "inventory", "--profile", missing_model_profile])
     expect_status(2, [ROOT_DIR / "scripts/models.sh", "download", "heroine-i2v-core", "--profile", missing_model_profile])

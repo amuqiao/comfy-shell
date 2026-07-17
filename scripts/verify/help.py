@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import subprocess
 
-from scripts.verify.common import ROOT_DIR, section, run
+from scripts.verify.common import ROOT_DIR, capture, die, section, run
+
+
+def _help_contains(argv: list, expected: tuple[str, ...], message: str) -> None:
+    result = capture(argv)
+    if result.returncode != 0:
+        die(f"help command failed ({result.returncode}): {' '.join(str(part) for part in argv)}", result.returncode)
+    output = result.stdout + result.stderr
+    for needle in expected:
+        if needle not in output:
+            print(output)
+            die(f"{message}: missing {needle}", 1)
 
 
 def run_help() -> None:
@@ -25,6 +36,8 @@ def run_help() -> None:
         "list",
         "list-models",
         "inspect",
+        "inventory",
+        "catalog-status",
         "status",
         "verify",
         "plan",
@@ -47,3 +60,14 @@ def run_help() -> None:
         "gpu",
     ):
         run([ROOT_DIR / "scripts/remote.sh", subcmd, "-h"], stdout=subprocess.DEVNULL)
+
+    _help_contains(
+        [ROOT_DIR / "scripts/models.sh", "-h"],
+        ("inventory", "catalog-status", "status              兼容别名"),
+        "models.sh top-level help drifted from model command contract",
+    )
+    _help_contains(
+        [ROOT_DIR / "scripts/remote.sh", "models", "-h"],
+        ("inventory", "catalog-status", "status 是 catalog-status 的兼容别名"),
+        "remote.sh models help drifted from model command contract",
+    )

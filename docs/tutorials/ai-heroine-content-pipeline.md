@@ -819,14 +819,16 @@ full body fashion pose, the woman slowly turns around, gentle hair movement, smo
 ```
 
 这时再看模型包命令。`check` 只校验 catalog schema；`list` 只读取 catalog；
-`plan` 解释 catalog；`status` 盘点当前模型目录；`plan/status` 默认读取 `.env`，
+`plan` 解释 catalog；`inventory` 扫描磁盘实际模型文件；`catalog-status` 对账 catalog 声明项；
+`plan/inventory/catalog-status` 默认读取 `.env`，
 并要求其中有 `COMFY_MODEL_ROOT`：
 
 ```bash
 ./scripts/models.sh check
 ./scripts/models.sh list
 ./scripts/models.sh plan heroine-i2v-core
-./scripts/models.sh status heroine-i2v-core
+./scripts/models.sh inventory
+./scripts/models.sh catalog-status heroine-i2v-core
 ```
 
 `heroine-i2v-core` 是历史保留的模型包名称，用于以后在 Mac 和服务器复现一组视频生成相关模型。当前 MVP 主线仍然是动作参考 / 姿态控制 / 视频参考 workflow；普通 I2V 只是兜底，不是第一入口。

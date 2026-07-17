@@ -3,8 +3,9 @@ from __future__ import annotations
 import sys
 
 from scripts.models.catalog import check_catalog, list_bundles, list_models
-from scripts.models.common import CliError, die, parse_model_args, section
+from scripts.models.common import CliError, die, parse_model_args, parse_profile_args, section
 from scripts.models.download import download_bundle, download_model, install_upload
+from scripts.models.inventory import print_inventory
 from scripts.models.plan import print_model_info, print_plan
 from scripts.models.status import print_status
 from scripts.models.workflow import inspect_workflow
@@ -41,14 +42,32 @@ def main(argv: list[str]) -> int:
         section("Workflow Models")
         return inspect_workflow(args[0])
 
-    if command in {"status", "verify"}:
+    if command in {"catalog-status", "status", "verify"}:
+        effective_command = command
+        if command == "status":
+            print("WARNING: status is deprecated; use catalog-status.", file=sys.stderr)
+            effective_command = "catalog-status"
         parsed_args, config_file, model_id, upload_file = parse_model_args(command, args)
         if upload_file:
             die(f"{command} does not accept --file", 2)
         if len(parsed_args) > 1:
             die(f"{command} takes zero or one bundle", 2)
-        section("Model Status" if command == "status" else "Model Verify")
-        return print_status(command, parsed_args[0] if parsed_args else "", model_id, config_file)
+        section("Model Catalog Status" if effective_command == "catalog-status" else "Model Verify")
+        return print_status(effective_command, parsed_args[0] if parsed_args else "", model_id, config_file)
+
+    if command == "inventory":
+        show_all = False
+        inventory_args: list[str] = []
+        for arg in args:
+            if arg == "--all":
+                show_all = True
+            else:
+                inventory_args.append(arg)
+        parsed_args, config_file = parse_profile_args(command, inventory_args)
+        if parsed_args:
+            die("inventory takes no arguments", 2)
+        section("模型库存")
+        return print_inventory(config_file, show_all=show_all)
 
     if command == "plan":
         parsed_args, config_file, model_id, upload_file = parse_model_args(command, args)

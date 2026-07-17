@@ -1,6 +1,6 @@
 # 模型命令速查
 
-这份速查表只解决一件事：用 `models.sh` 和 `remote.sh models` 检查、下载、验证本机或远端 ComfyUI 模型。
+这份速查表只解决一件事：用 `models.sh` 和 `remote.sh models` 查看磁盘模型、对账 catalog、下载和验证本机或远端 ComfyUI 模型。
 
 ## 先记住边界
 
@@ -21,6 +21,9 @@
 默认运行配置真源始终是当前机器 checkout 根目录的 `.env`。
 
 ## 状态怎么读
+
+`inventory` 展示 `COMFY_MODEL_ROOT` 里实际有哪些模型文件，默认隐藏 ComfyUI 的 `put_*_here` 占位文件和 `configs/*.yaml` 支持配置；`catalog-status` 展示 catalog 声明项是否已经落到磁盘。
+旧命令 `status` 仍可用，但只是 `catalog-status` 的兼容别名。
 
 | 状态 | 含义 | 下一步 |
 |---|---|---|
@@ -52,8 +55,10 @@ COMFY_MODEL_ROOT=./ComfyUI/models
 ./scripts/models.sh check
 ./scripts/models.sh list
 ./scripts/models.sh list-models retro-anime-photo-core
-./scripts/models.sh status retro-anime-photo-core
-./scripts/models.sh status --model isabelia-v10-checkpoint
+./scripts/models.sh inventory
+./scripts/models.sh inventory --all
+./scripts/models.sh catalog-status retro-anime-photo-core
+./scripts/models.sh catalog-status --model isabelia-v10-checkpoint
 ./scripts/models.sh plan retro-anime-photo-core
 ./scripts/models.sh plan --model isabelia-v10-checkpoint
 ```
@@ -63,7 +68,7 @@ COMFY_MODEL_ROOT=./ComfyUI/models
 ```bash
 ./scripts/models.sh download retro-anime-photo-core
 ./scripts/models.sh download --model isabelia-v10-checkpoint
-./scripts/models.sh status retro-anime-photo-core
+./scripts/models.sh catalog-status retro-anime-photo-core
 ./scripts/models.sh verify retro-anime-photo-core
 ./scripts/models.sh verify --model isabelia-v10-checkpoint
 ```
@@ -116,8 +121,10 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 ```bash
 ./scripts/remote.sh models check
 ./scripts/remote.sh models list-models retro-anime-photo-core
-./scripts/remote.sh models status retro-anime-photo-core
-./scripts/remote.sh models status --model isabelia-v10-checkpoint
+./scripts/remote.sh models inventory
+./scripts/remote.sh models inventory --all
+./scripts/remote.sh models catalog-status retro-anime-photo-core
+./scripts/remote.sh models catalog-status --model isabelia-v10-checkpoint
 ./scripts/remote.sh models plan retro-anime-photo-core
 ./scripts/remote.sh models plan --model isabelia-v10-checkpoint
 ```
@@ -134,7 +141,7 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 下载后复查：
 
 ```bash
-./scripts/remote.sh models status retro-anime-photo-core
+./scripts/remote.sh models catalog-status retro-anime-photo-core
 ./scripts/remote.sh models verify retro-anime-photo-core
 ```
 
@@ -147,7 +154,7 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 先在远端确认缺哪个模型：
 
 ```bash
-./scripts/remote.sh models status retro-anime-photo-core
+./scripts/remote.sh models catalog-status retro-anime-photo-core
 ```
 
 本机下载指定模型：
@@ -186,7 +193,7 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 2. 确认文件确实是 workflow 需要的模型。
 3. 下载到输出里的 `target` 路径。
 4. 文件名必须和 `target` 一致。
-5. 重新执行 `status` 或 `verify`。
+5. 重新执行 `catalog-status` 或 `verify`。
 
 不要把名字相近的模型直接改名成目标文件，除非已经确认它们是同一个模型版本。
 
@@ -196,7 +203,7 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 
 ```bash
 ./scripts/models.sh check
-./scripts/models.sh status retro-anime-photo-core
+./scripts/models.sh catalog-status retro-anime-photo-core
 ```
 
 远端使用前先同步：
@@ -204,5 +211,5 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 ```bash
 ./scripts/remote.sh sync --yes
 ./scripts/remote.sh models check
-./scripts/remote.sh models status retro-anime-photo-core
+./scripts/remote.sh models catalog-status retro-anime-photo-core
 ```

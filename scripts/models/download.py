@@ -205,13 +205,13 @@ def print_download_next(manual: int, blocked: int, failed: int) -> None:
     if manual:
         print("  1. 按 manual 列表打开 source page 下载")
         print("  2. 放到 target 路径")
-        print("  3. 重新执行 status 或 verify")
+        print("  3. 重新执行 catalog-status 或 verify")
     if blocked:
         print("  - blocked 条目需要先补 catalog: 可信来源、sha256, 或改成 manual")
     if failed:
         print("  - failed 条目看上方错误原因, 修复网络、hash 或目标文件后重试")
     if not manual and not blocked and not failed:
-        print("  - auto 条目已处理完成; 可执行 verify 做严格校验")
+        print("  - auto 条目已处理完成; 可执行 catalog-status 查看现状或执行 verify 做严格校验")
 
 
 def download_one_model(
@@ -306,8 +306,8 @@ def download_model(model_id: str, config_file: Path) -> int:
     print(f"failed: {stats['failed']}")
     print_download_next(stats["manual"], stats["blocked"], stats["failed"])
 
-    section("Status")
-    print_status("status", "", model_id, config_file)
+    section("Catalog Status")
+    print_status("catalog-status", "", model_id, config_file)
     if stats["failed"]:
         return 4
     if stats["manual"] or stats["blocked"]:
@@ -348,8 +348,8 @@ def download_bundle(bundle_name: str, config_file: Path) -> int:
     print(f"failed: {stats['failed']}")
     print_download_next(stats["manual"], stats["blocked"], stats["failed"])
 
-    section("Status")
-    print_status("status", bundle_name, "", config_file)
+    section("Catalog Status")
+    print_status("catalog-status", bundle_name, "", config_file)
     return 4 if stats["failed"] else 0
 
 
