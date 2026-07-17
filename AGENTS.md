@@ -2,6 +2,32 @@
 
 本仓库是管理 `ComfyUI` checkout 的壳项目，不是 ComfyUI 上游源码本体。
 
+### scripts 使用边界
+
+`scripts/` 是本仓库稳定操作入口。Agent 需要运行、修改或验证本项目时，优先通过
+这些入口理解职责和副作用；完整参数与维护规范以 `scripts/README.md` 和各脚本
+`-h` 输出为准，`AGENTS.md` 只记录入口选择边界。
+
+- `scripts/check_env.sh`: 只读环境体检。用于查看仓库、配置、Python/uv、设备、
+  端口和基础网络状态；不安装依赖、不下载模型、不启动 ComfyUI。
+- `scripts/local.sh`: 本机 ComfyUI runtime 入口。负责 `bootstrap`、`start`、
+  `stop`、`restart`、`status`、`logs`；`bootstrap` 是 `.venv` owner，
+  `start` 只从已有 `.venv` 启动 ComfyUI。
+- `scripts/nodes.sh`: 只管理 ComfyUI-Manager Python 依赖是否可用。它不安装第三方
+  `custom_nodes`，不下载模型，不启动 ComfyUI。
+- `scripts/models.sh`: 模型 catalog 和本机模型资产入口。用于 `check`、
+  `inventory`、`catalog-status`、`verify`、`plan`、显式 `download` 和上传落位；
+  不参与 `local.sh bootstrap`，不自动下载模型，不修改 ComfyUI 已跟踪源码。
+- `scripts/remote.sh`: 远端 checkout 编排入口。通过 SSH 在远端调用本仓库脚本，
+  负责 `sync`、远端 `bootstrap`、生命周期、状态、日志、模型委派、隧道和 GPU
+  诊断；会写远端或启动远端进程的命令必须显式确认其副作用。
+- `scripts/verify.sh`: scripts 最小可重复验证入口。修改 `scripts/` 后优先按
+  `scripts/README.md` 的验证要求运行对应 smoke、help、语法和合同检查。
+
+不要绕过这些入口直接手工改 `.venv`、远端 checkout、模型目录或 ComfyUI 进程状态，
+除非当前任务明确要求排查脚本自身无法覆盖的问题。只读命令不得顺手修复环境；安装、
+下载、启动、停止和远端写操作都必须由用户意图或当前任务明确覆盖。
+
 ### 依赖职责
 
 - 本仓库只有一套 Python 环境: 仓库根目录 `.venv`。
