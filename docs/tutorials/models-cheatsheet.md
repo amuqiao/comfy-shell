@@ -169,9 +169,9 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 上传未登记到 catalog 的本机单个模型文件：
 
 ```bash
-./scripts/remote.sh models upload-file --file ./ComfyUI/models/vae/kl-f8-anime2.ckpt --to vae
-./scripts/remote.sh models upload-file --file ./ComfyUI/models/upscale_models/4x-UltraSharp.pth --to upscale_models
-./scripts/remote.sh models upload-file --file ~/Downloads/foo.safetensors --to loras --name foo.safetensors
+./scripts/remote.sh models upload-file --file ./ComfyUI/models/vae/vaeKlF8Anime2_klF8Anime2VAE.safetensors --to vae
+./scripts/remote.sh models upload-file --file ./ComfyUI/models/upscale_models/4xUltrasharp_4xUltrasharpV10.pt --to upscale_models
+./scripts/remote.sh models upload-file --file  ./ComfyUI/models/checkpoints/isabelia_v10.safetensors --to checkpoints --name isabelia_v10.safetensors
 ```
 
 `upload-file` 不读取 `catalog.yaml`，只负责把本机文件同步到远端 `COMFY_MODEL_ROOT/<to>/<name>`。它会先上传到远端临时文件，再校验 `size/sha256`；远端 target 已存在且内容相同会跳过，内容不同会拒绝覆盖。
