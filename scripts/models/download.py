@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -29,6 +31,62 @@ from scripts.models.common import (
 )
 from scripts.models.plan import print_plan
 from scripts.models.status import print_status
+
+
+PROGRESS_CHUNK_BYTES = 1024 * 1024
+PROGRESS_INTERVAL_BYTES = 64 * 1024 * 1024
+PROGRESS_INTERVAL_SECONDS = 10.0
+
+
+def format_bytes(value: float) -> str:
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    size = float(value)
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} TiB"
+
+
+def format_eta(seconds: float) -> str:
+    if seconds < 0:
+        return "unknown"
+    rounded = int(seconds)
+    if rounded < 60:
+        return f"{rounded}s"
+    minutes, secs = divmod(rounded, 60)
+    if minutes < 60:
+        return f"{minutes}m{secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
+
+
+def expected_download_size(download: dict[str, Any], response: Any) -> int | None:
+    configured = download.get("size_bytes")
+    if configured is not None:
+        return int(configured)
+    header = response.headers.get("Content-Length")
+    if header and header.isdigit():
+        return int(header)
+    return None
+
+
+def progress_detail(downloaded: int, total: int | None, speed: float) -> str:
+    total_part = format_bytes(total) if total is not None else "unknown"
+    percent_part = ""
+    eta_part = "ETA unknown"
+    if total is not None and total > 0:
+        percent_part = f" {downloaded / total * 100:.1f}%"
+        if speed > 0:
+            eta_part = f"ETA {format_eta((total - downloaded) / speed)}"
+    speed_part = f"{format_bytes(speed)}/s" if speed > 0 else "unknown/s"
+    return f"{format_bytes(downloaded)} / {total_part}{percent_part} {speed_part} {eta_part}"
+
+
+def emit_progress(model_id: str, detail: str) -> None:
+    print(f"{'PROGRESS':<18} {model_id:<24} {detail}", file=sys.stderr, flush=True)
 
 
 def resolve_hf_command() -> list[str]:
@@ -107,6 +165,7 @@ def download_huggingface(
 
 def download_url(model: dict[str, Any], tmp_dir: Path) -> Path:
     download = download_info(model)
+    model_id = str(model["id"])
     target = tmp_dir / model["filename"]
     request = urllib.request.Request(
         str(download["url"]),
@@ -114,7 +173,28 @@ def download_url(model: dict[str, Any], tmp_dir: Path) -> Path:
     )
     try:
         with urllib.request.urlopen(request, timeout=60) as response, target.open("wb") as output:
-            shutil.copyfileobj(response, output, 1024 * 1024)
+            total = expected_download_size(download, response)
+            downloaded = 0
+            last_emit_bytes = 0
+            start_time = time.monotonic()
+            last_emit_time = start_time
+            while True:
+                chunk = response.read(PROGRESS_CHUNK_BYTES)
+                if not chunk:
+                    break
+                output.write(chunk)
+                downloaded += len(chunk)
+                now = time.monotonic()
+                if (
+                    downloaded - last_emit_bytes >= PROGRESS_INTERVAL_BYTES
+                    or now - last_emit_time >= PROGRESS_INTERVAL_SECONDS
+                ):
+                    elapsed = max(now - start_time, 0.001)
+                    emit_progress(model_id, progress_detail(downloaded, total, downloaded / elapsed))
+                    last_emit_bytes = downloaded
+                    last_emit_time = now
+            elapsed = max(time.monotonic() - start_time, 0.001)
+            emit_progress(model_id, progress_detail(downloaded, total, downloaded / elapsed))
     except OSError as exc:
         die(f"url download failed: {exc}", 4)
     return target

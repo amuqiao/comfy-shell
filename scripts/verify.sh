@@ -340,22 +340,31 @@ cat >"$civitai_profile" <<'EOF'
 COMFY_MODEL_ROOT=/tmp/comfy-shell-civitai-profile-models
 EOF
 rm -rf /tmp/comfy-shell-civitai-profile-models
+civitai_download_stdout="$contract_tmp_dir/civitai-download.stdout"
+civitai_download_stderr="$contract_tmp_dir/civitai-download.stderr"
 set +e
-civitai_download_output="$(CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" download civitai-smoke --profile "$civitai_profile" 2>&1)"
+CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" download civitai-smoke --profile "$civitai_profile" \
+  >"$civitai_download_stdout" 2>"$civitai_download_stderr"
 civitai_download_status=$?
 set -e
 if [[ "$civitai_download_status" -ne 0 ]]; then
-  printf '%s\n' "$civitai_download_output" >&2
+  cat "$civitai_download_stdout" "$civitai_download_stderr" >&2
   die "models.sh download did not skip manual/blocked entries while auto succeeded" 1
 fi
 if [[ ! -f /tmp/comfy-shell-civitai-profile-models/loras/civitai.bin ]]; then
   die "models.sh download did not write civitai method target file" 1
 fi
 for expected_summary in 'success: 1' 'manual: 1' 'blocked: 1' 'failed: 0'; do
-  if ! printf '%s\n' "$civitai_download_output" | grep -q "$expected_summary"; then
+  if ! grep -q "$expected_summary" "$civitai_download_stdout"; then
     die "models.sh download summary missing: $expected_summary" 1
   fi
 done
+if ! grep -q 'PROGRESS .*civitai-file' "$civitai_download_stderr"; then
+  die "models.sh download did not print civitai download progress" 1
+fi
+if grep -q 'PROGRESS .*civitai-file' "$civitai_download_stdout"; then
+  die "models.sh download printed progress to stdout instead of stderr" 1
+fi
 single_civitai_profile="$contract_tmp_dir/single-civitai-profile.env"
 cat >"$single_civitai_profile" <<'EOF'
 COMFY_MODEL_ROOT=/tmp/comfy-shell-single-civitai-profile-models
