@@ -351,6 +351,160 @@ for expected_summary in 'success: 1' 'manual: 1' 'blocked: 1' 'failed: 0'; do
     die "models.sh download summary missing: $expected_summary" 1
   fi
 done
+status_smoke_root="$contract_tmp_dir/status-models"
+mkdir -p "$status_smoke_root/checkpoints" "$status_smoke_root/loras"
+printf 'model-data' >"$status_smoke_root/checkpoints/ok.bin"
+status_ok_sha="$(python3 - "$status_smoke_root/checkpoints/ok.bin" <<'PY'
+import hashlib
+import pathlib
+import sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
+status_ok_size="$(wc -c <"$status_smoke_root/checkpoints/ok.bin" | tr -d ' ')"
+status_catalog="$contract_tmp_dir/status-catalog.yaml"
+cat >"$status_catalog" <<EOF
+version: 2
+bundles:
+  status-a:
+    title: Status A
+    models:
+      - id: shared-ok-a
+        directory: checkpoints
+        filename: ok.bin
+        source:
+          platform: huggingface
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: smoke/repo
+          path: ok.bin
+          sha256: $status_ok_sha
+          size_bytes: $status_ok_size
+      - id: missing-file
+        directory: checkpoints
+        filename: missing.bin
+        source:
+          platform: civitai
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file
+          sha256: $civitai_sha
+      - id: manual-file
+        directory: loras
+        filename: manual.bin
+        source:
+          platform: unknown
+        download:
+          mode: manual
+          method: browser
+          reason: status manual entry
+      - id: blocked-file
+        directory: loras
+        filename: blocked.bin
+        source:
+          platform: huggingface
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: smoke/repo
+          path: blocked.bin
+          reason: status blocked entry
+  status-b:
+    title: Status B
+    models:
+      - id: shared-ok-b
+        directory: checkpoints
+        filename: ok.bin
+        source:
+          platform: huggingface
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: smoke/repo
+          path: ok.bin
+          sha256: $status_ok_sha
+          size_bytes: $status_ok_size
+EOF
+status_profile="$contract_tmp_dir/status-profile.env"
+cat >"$status_profile" <<EOF
+COMFY_MODEL_ROOT=$status_smoke_root
+EOF
+set +e
+status_smoke_output="$(CATALOG_FILE="$status_catalog" "${ROOT_DIR}/scripts/models.sh" status --profile "$status_profile" 2>&1)"
+status_smoke_status=$?
+set -e
+if [[ "$status_smoke_status" -ne 1 ]]; then
+  printf '%s\n' "$status_smoke_output" >&2
+  die "models.sh status smoke returned $status_smoke_status, expected 1" 1
+fi
+for expected_status in 'ok: 1' 'missing: 1' 'manual: 1' 'blocked: 1' 'total_unique: 4' 'bundles: status-a, status-b'; do
+  if ! printf '%s\n' "$status_smoke_output" | grep -q "$expected_status"; then
+    printf '%s\n' "$status_smoke_output" >&2
+    die "models.sh status summary missing: $expected_status" 1
+  fi
+done
+mixed_mode_catalog="$contract_tmp_dir/mixed-mode-catalog.yaml"
+cat >"$mixed_mode_catalog" <<EOF
+version: 2
+bundles:
+  mixed-manual:
+    title: Mixed Manual
+    models:
+      - id: shared-manual
+        directory: checkpoints
+        filename: shared.bin
+        source:
+          platform: unknown
+        download:
+          mode: manual
+          method: browser
+          reason: mixed manual entry
+  mixed-auto:
+    title: Mixed Auto
+    models:
+      - id: shared-auto
+        directory: checkpoints
+        filename: shared.bin
+        source:
+          platform: huggingface
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: smoke/repo
+          path: shared.bin
+          sha256: $status_ok_sha
+          size_bytes: $status_ok_size
+EOF
+set +e
+mixed_mode_output="$(CATALOG_FILE="$mixed_mode_catalog" "${ROOT_DIR}/scripts/models.sh" status --profile "$status_profile" 2>&1)"
+mixed_mode_status=$?
+set -e
+if [[ "$mixed_mode_status" -ne 1 ]]; then
+  printf '%s\n' "$mixed_mode_output" >&2
+  die "models.sh status mixed-mode target returned $mixed_mode_status, expected 1" 1
+fi
+for expected_mixed in 'conflict: 1' 'download.mode differs:'; do
+  if ! printf '%s\n' "$mixed_mode_output" | grep -q "$expected_mixed"; then
+    printf '%s\n' "$mixed_mode_output" >&2
+    die "models.sh status mixed-mode output missing: $expected_mixed" 1
+  fi
+done
+for expected_mode in 'auto' 'manual'; do
+  if ! printf '%s\n' "$mixed_mode_output" | grep -q "$expected_mode"; then
+    printf '%s\n' "$mixed_mode_output" >&2
+    die "models.sh status mixed-mode output missing mode: $expected_mode" 1
+  fi
+done
+if printf '%s\n' "$mixed_mode_output" | grep -q './scripts/models.sh download mixed-manual'; then
+  printf '%s\n' "$mixed_mode_output" >&2
+  die "models.sh status suggested downloading the manual bundle for mixed target" 1
+fi
 old_schema_catalog="$contract_tmp_dir/old-schema-catalog.yaml"
 cat >"$old_schema_catalog" <<EOF
 version: 1

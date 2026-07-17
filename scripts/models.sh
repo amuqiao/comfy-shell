@@ -46,9 +46,9 @@ usage() {
   check               校验 catalog.yaml schema
   list                列出 catalog 中的 bundle
   inspect <file>      从 PNG/workflow JSON 提取模型引用
-  status [bundle]     检查 bundle 模型文件是否存在、是否可验证
-  verify [bundle]     要求 bundle 模型文件存在且 hash 正确
-  plan <bundle>       输出下载目标路径、来源和 auto/manual/blocked 计划
+  plan <bundle>       解释 catalog 中这个 bundle 应准备什么
+  status [bundle]     盘点 COMFY_MODEL_ROOT 中 catalog 声明的模型现状
+  verify [bundle]     严格校验模型是否可复现
   download <bundle>   显式下载 bundle 中的模型文件
   help                显示本帮助
 
@@ -81,7 +81,7 @@ usage() {
 
 Exit Codes:
   0  成功
-  1  status/verify 检查发现模型文件缺失、manual、blocked 或 hash 不匹配
+  1  status/verify 检查发现 missing、manual、blocked、bad、conflict 或未验证文件
   2  缺少 command、非法参数、catalog 缺失、Python/PyYAML/hf 缺失
   4  auto 下载运行失败
 EOF
@@ -141,8 +141,9 @@ EOF
   ./scripts/models.sh status -h|--help
 
 作用域:
-  检查 bundle 模型文件是否存在且非空。
-  有 sha256 时会校验 hash; manual/blocked 会显示原因和 target。
+  盘点 catalog 声明的模型在 COMFY_MODEL_ROOT 中的当前状态。
+  不传 bundle 时检查全部 bundle, 并按 directory/filename 去重。
+  有 sha256 时会校验 hash; manual/blocked 会显示原因、target 和建议动作。
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
@@ -161,8 +162,8 @@ EOF
   ./scripts/models.sh verify -h|--help
 
 作用域:
-  严格校验 bundle 模型文件。只有文件存在且 sha256 正确才算 OK。
-  manual、blocked、missing、bad 都会返回非 0。
+  严格校验 catalog 声明的模型是否可复现。只有文件存在且 sha256 正确才算 OK。
+  manual、blocked、missing、bad、conflict 和 present_unverified 都会返回非 0。
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
@@ -181,8 +182,8 @@ EOF
   ./scripts/models.sh plan -h|--help
 
 作用域:
-  输出 target、source、download.mode 和 download.method, 不访问网络。
-  manual/blocked 会明确显示原因和下一步动作。
+  解释 catalog: 输出 target、source、download.mode 和 download.method, 不访问网络。
+  plan 不检查文件是否已经存在; 要看磁盘现状请用 status。
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。

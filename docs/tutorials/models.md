@@ -83,14 +83,21 @@ catalog.yaml
   -> download.method 决定下载方式: huggingface、civitai、browser
   -> auto 必须提供 sha256; huggingface 还需要 repo/path/repo_type; civitai 需要 download url
 
-plan/status
-  -> 只读
+plan
+  -> 只读解释 catalog
+  -> 输出 target、source、download.mode 和 download.method
+  -> 不检查文件是否已经存在
   -> download.mode=manual 显示 manual 和 source page/target
   -> download.mode=blocked 显示 blocked 和阻塞原因
 
+status
+  -> 只读盘点 COMFY_MODEL_ROOT 中的模型现状
+  -> 不传 bundle 时检查全部 bundle, 并按 directory/filename 去重
+  -> 输出 summary、missing、manual、blocked、bad、conflict 等分组
+
 verify
   -> 严格检查文件存在且 sha256 正确
-  -> manual、blocked、missing、bad 都返回非 0
+  -> manual、blocked、missing、bad、conflict、present_unverified 都返回非 0
 
 download
   -> 只下载 download.mode=auto 的条目
@@ -145,7 +152,7 @@ ComfyUI/models/upscale_models/     放大模型
 ./scripts/models.sh inspect '.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png'
 ```
 
-只读查看。`check` 只校验 catalog schema；`list` 只读取 catalog；`status`、`verify`、`plan` 和 `download` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`。
+只读查看。`check` 只校验 catalog schema；`list` 只读取 catalog；`plan` 解释 catalog；`status` 盘点模型目录；`verify` 做严格校验；`download` 只下载可自动下载的条目。`status`、`verify`、`plan` 和 `download` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`。
 
 `.env.example` 只是复制生成 `.env` 的模板，不作为运行 profile：
 
@@ -153,6 +160,7 @@ ComfyUI/models/upscale_models/     放大模型
 ./scripts/models.sh check
 ./scripts/models.sh list
 ./scripts/models.sh plan retro-anime-photo-core
+./scripts/models.sh status
 ./scripts/models.sh status retro-anime-photo-core
 ./scripts/models.sh verify retro-anime-photo-core
 ```

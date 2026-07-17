@@ -305,9 +305,7 @@ def model_state(model_root: Path, model: dict[str, Any], strict: bool = False) -
         detail = "present; missing sha256, not verified"
         if source.get("page_url"):
             detail += f"; page={source['page_url']}"
-        if strict:
-            return ("MANUAL", path, detail, False)
-        return ("MANUAL", path, detail, False)
+        return ("PRESENT_UNVERIFIED", path, detail, False)
 
     ok, detail = file_matches(path, expected_sha, expected_size)
     if ok:
@@ -333,18 +331,173 @@ def check_catalog() -> int:
     return 0
 
 
+def unique_values(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+
+def status_record_key(model: dict[str, Any]) -> str:
+    return f"{model['directory']}/{model['filename']}"
+
+
+def expected_sha(model: dict[str, Any]) -> str:
+    return str(download_info(model).get("sha256") or "").lower()
+
+
+def expected_size(model: dict[str, Any]) -> str:
+    value = download_info(model).get("size_bytes")
+    return "" if value is None else str(value)
+
+
+def best_status_model(models: list[dict[str, Any]]) -> dict[str, Any]:
+    for model in models:
+        if expected_sha(model):
+            return model
+    return models[0]
+
+
+def status_conflict(models: list[dict[str, Any]]) -> str:
+    modes = unique_values([download_mode(model) for model in models])
+    methods = unique_values([download_method(model) for model in models if download_method(model)])
+    hashes = unique_values([expected_sha(model) for model in models if expected_sha(model)])
+    sizes = unique_values([expected_size(model) for model in models if expected_size(model)])
+    details: list[str] = []
+    if len(modes) > 1:
+        details.append(f"download.mode differs: {', '.join(modes)}")
+    if len(methods) > 1:
+        details.append(f"download.method differs: {', '.join(methods)}")
+    if len(hashes) > 1:
+        details.append(f"sha256 differs: {', '.join(hashes)}")
+    if len(sizes) > 1:
+        details.append(f"size_bytes differs: {', '.join(sizes)}")
+    return "; ".join(details)
+
+
+def print_status_record(state: str, record: dict[str, Any]) -> None:
+    print(f"  - {', '.join(record['ids'])}")
+    print(f"    target: {record['target']}")
+    print(f"    path: {record['path']}")
+    print(f"    bundles: {', '.join(record['bundles'])}")
+    if record.get("source"):
+        print(f"    source: {record['source']}")
+    if record.get("action"):
+        print(f"    action: {record['action']}")
+    print(f"    detail: {record['detail']}")
+
+
+def status_action(state: str, model: dict[str, Any], bundle_names: list[str]) -> str:
+    download = download_info(model)
+    mode = str(download["mode"])
+    if state == "MISSING" and mode == "auto":
+        return f"./scripts/models.sh download {bundle_names[0]}"
+    if state == "MANUAL":
+        source = source_info(model)
+        page = source.get("page_url")
+        if page:
+            return f"打开 source page 下载后放到 target: {page}"
+        return "确认可信来源后手动下载到 target"
+    if state == "BLOCKED":
+        return "补齐 catalog 的可信来源和 sha256, 或改成 manual"
+    if state == "BAD":
+        return "检查文件是否下载错版本; 脚本不会自动覆盖已有文件"
+    if state == "PRESENT_UNVERIFIED":
+        return "如需 verify 通过, 为 catalog 补齐 sha256"
+    return ""
+
+
+def collect_status_records(
+    data: dict[str, Any],
+    bundle_name: str,
+    model_root: Path,
+    strict: bool,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    for name, bundle in bundle_items(data, bundle_name):
+        for model in bundle.get("models") or []:
+            grouped.setdefault(status_record_key(model), []).append((name, model))
+
+    records: list[dict[str, Any]] = []
+    for target in sorted(grouped):
+        entries = grouped[target]
+        models = [model for _, model in entries]
+        bundle_names = unique_values([name for name, _ in entries])
+        ids = unique_values([str(model["id"]) for model in models])
+        conflict = status_conflict(models)
+        model = best_status_model(models)
+        path = model_path(model_root, model)
+        if conflict:
+            state, detail, ok = "CONFLICT", conflict, False
+        else:
+            state, _, detail, ok = model_state(model_root, model, strict=strict)
+        records.append(
+            {
+                "state": state,
+                "target": target,
+                "path": str(path),
+                "ids": ids,
+                "bundles": bundle_names,
+                "detail": detail,
+                "ok": ok,
+                "source": source_summary(model),
+                "action": status_action(state, model, bundle_names),
+            }
+        )
+    return records
+
+
 def print_status(mode: str, bundle_name: str, config_file: Path) -> int:
     data = load_catalog()
     model_root = model_root_from_config(config_file)
-    failed = 0
     strict = mode == "verify"
-    for name, bundle in bundle_items(data, bundle_name):
-        print(f"## {name} - {bundle.get('title', '')}")
-        for model in bundle.get("models") or []:
-            state, path, detail, ok = model_state(model_root, model, strict=strict)
-            print(f"{state}\t{model['id']}\t{path}\t{detail}")
-            if not ok:
-                failed += 1
+    records = collect_status_records(data, bundle_name, model_root, strict)
+    scope = bundle_name if bundle_name else "all bundles"
+    counters = {
+        "ok": 0,
+        "present_unverified": 0,
+        "missing": 0,
+        "manual": 0,
+        "blocked": 0,
+        "bad": 0,
+        "conflict": 0,
+    }
+    for record in records:
+        key = str(record["state"]).lower()
+        if key == "present_unverified":
+            counters["present_unverified"] += 1
+        elif key in counters:
+            counters[key] += 1
+
+    print(f"root: {model_root}")
+    print(f"scope: {scope}")
+    print(f"catalog: {CATALOG_FILE}")
+    print("Summary:")
+    for key in ("ok", "present_unverified", "missing", "manual", "blocked", "bad", "conflict"):
+        print(f"  {key}: {counters[key]}")
+    print(f"  total_unique: {len(records)}")
+
+    sections = [
+        ("MISSING", "Missing"),
+        ("MANUAL", "Manual"),
+        ("BLOCKED", "Blocked"),
+        ("BAD", "Bad"),
+        ("CONFLICT", "Conflict"),
+        ("PRESENT_UNVERIFIED", "Present Unverified"),
+        ("OK", "OK"),
+    ]
+    for state, title in sections:
+        subset = [record for record in records if record["state"] == state]
+        if not subset:
+            continue
+        print(f"\n{title}:")
+        for record in subset:
+            print_status_record(state, record)
+
+    failed = sum(1 for record in records if not record["ok"])
     return 1 if failed else 0
 
 
