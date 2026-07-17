@@ -17,7 +17,8 @@
   -> 实际执行的是远端 ./scripts/models.sh ...
 ```
 
-`.env.example` 只是配置示例。默认运行配置真源是 `.env`。
+`.env.example` 是本机配置模板；`.env.remote.example` 是远端 checkout 的 `.env` 复制模板。
+默认运行配置真源始终是当前机器 checkout 根目录的 `.env`。
 
 ## 状态怎么读
 
@@ -36,7 +37,7 @@
 前提：本机 `.env` 已配置真实模型目录。
 
 ```dotenv
-COMFY_MODEL_ROOT=/Users/admin/Downloads/Code/comfy-shell/ComfyUI/models
+COMFY_MODEL_ROOT=./ComfyUI/models
 ```
 
 如果 `models.sh check` 提示缺 `PyYAML` 或 `.venv/bin/python`，先按根 [README](../../README.md) 完成 `.env` 初始化，再执行：
@@ -88,6 +89,12 @@ REMOTE_DIR=/data/wangqiao/comfy-shell
 
 ```dotenv
 COMFY_MODEL_ROOT=/data/wangqiao/ComfyUI/models
+```
+
+可以在同步后把远端模板复制成远端 `.env`：
+
+```bash
+ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.example .env'
 ```
 
 前提三：远端已执行过 `bootstrap`，或者远端 checkout 的 `.venv/bin/python` 已可 import `PyYAML`。

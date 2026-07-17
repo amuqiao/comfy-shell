@@ -10,7 +10,8 @@ stays inside the `ComfyUI/` submodule.
 ```text
 comfy-shell/
   ComfyUI/           # submodule: git@github.com:Comfy-Org/ComfyUI.git, branch master
-  .env.example       # default project config example
+  .env.example       # local machine config example
+  .env.remote.example # remote checkout config example
   configs/models/    # optional model catalog
   scripts/           # shell-managed local scripts
   tools/             # one-off scaffolding tools
@@ -37,10 +38,14 @@ Create `.env` once before running lifecycle commands:
 cp .env.example .env
 ```
 
-`.env.example` keeps one concrete server CUDA example plus commented macOS
-overrides. Edit `.env` for the machine you are running on before lifecycle
-commands. Treat `.env.example` as a copy/edit template, not as a runtime
-`--profile` target.
+`.env.example` is the local-machine template. By default it uses relative
+ComfyUI paths such as `COMFY_MODEL_ROOT=./ComfyUI/models`, so local
+`models.sh` downloads write to the local checkout. Treat `.env.example` as a
+copy/edit template, not as a runtime `--profile` target.
+
+`.env.remote.example` is the remote-checkout template. Copy it to the remote
+checkout as `.env` when the remote ComfyUI runtime should use server paths such
+as `/data/wangqiao/ComfyUI/models`.
 
 Scripts read `.env` by default. Process environment variables override `.env`
 values. Use `--profile FILE` only when you intentionally want a one-command
@@ -105,9 +110,6 @@ Use the shell scripts to prepare and run ComfyUI with Manager enabled:
 
 ```bash
 cp .env.example .env
-# Edit .env for macOS: COMFY_PROFILE=macos-mps, COMFY_DEVICE=mps,
-# TORCH_PRE=true, TORCH_INDEX_URL=https://download.pytorch.org/whl/nightly/cpu,
-# COMFY_MODEL_ROOT=./ComfyUI/models, COMFY_OUTPUT_ROOT=./ComfyUI/output.
 ./scripts/check_env.sh --no-network
 ./scripts/local.sh bootstrap
 ./scripts/local.sh start
@@ -156,7 +158,7 @@ REMOTE_TUNNEL_REMOTE_PORT=8188
 
 ```bash
 ./scripts/remote.sh sync --yes
-ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.example .env'
+ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.example .env'
 ./scripts/remote.sh bootstrap --yes
 ./scripts/remote.sh start --yes
 ./scripts/remote.sh status

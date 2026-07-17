@@ -63,6 +63,20 @@ def ensure_auto_file_ok(final_path: Path, expected_sha: str, expected_size: Any)
     return file_matches(final_path, expected_sha, expected_size)
 
 
+def ensure_target_parent(final_path: Path, model_id: str) -> None:
+    try:
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        die(
+            "unable to create model target directory: "
+            f"{final_path.parent}; COMFY_MODEL_ROOT may point to a path that is not writable on this machine. "
+            f"If this is a remote model path, use: ./scripts/remote.sh models download --model {model_id} --detach. "
+            "Otherwise fix COMFY_MODEL_ROOT in .env or pass --profile FILE. "
+            f"OS error: {exc}",
+            4,
+        )
+
+
 def download_huggingface(
     model: dict[str, Any],
     tmp_dir: Path,
@@ -146,7 +160,7 @@ def download_one_model(
 
     expected_sha = str(download["sha256"]).lower()
     expected_size = download.get("size_bytes")
-    final_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_target_parent(final_path, model_id)
 
     if final_path.exists():
         ok, detail = ensure_auto_file_ok(final_path, expected_sha, expected_size)
@@ -290,7 +304,7 @@ def install_upload(model_id: str, upload_file: str, config_file: Path) -> int:
     if not ok:
         die(f"upload file does not match catalog: {detail}", 4)
 
-    final_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_target_parent(final_path, model_id)
     shutil.move(str(source), str(final_path))
     ok, detail = ensure_auto_file_ok(final_path, expected, expected_size)
     if not ok:

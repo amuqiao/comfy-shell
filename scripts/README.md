@@ -78,7 +78,9 @@ Shell 入口默认只负责：
 ## 配置边界
 
 仓库根目录 `.env` 是默认配置真源。脚本默认读取 `.env`，但不 `source` 或执行其中内容。
-`.env.example` 只是 `cp .env.example .env` 的模板，不作为运行 profile 示例。
+`.env.example` 只是本机 `cp .env.example .env` 的模板，不作为运行 profile 示例。
+`.env.remote.example` 是远端 checkout 的 `.env` 复制模板；脚本不会自动读取它。
+本机 `.env` 的 `COMFY_MODEL_ROOT` 应指向本机可写模型目录；远端模型目录应写在远端 checkout 的 `.env`。
 如需临时读取其他配置文件，必须在命令中显式写 `--profile FILE`；这只覆盖本次命令，不改变默认真源。`.env` 不提交。
 
 配置读取规则：

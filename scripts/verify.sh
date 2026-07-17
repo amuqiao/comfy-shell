@@ -367,6 +367,26 @@ if [[ ! -f /tmp/comfy-shell-single-civitai-profile-models/loras/civitai.bin ]]; 
 fi
 CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" verify --model civitai-file --profile "$single_civitai_profile" >/dev/null
 expect_status 1 env CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" download --model manual-file --profile "$single_civitai_profile"
+blocked_model_root="$contract_tmp_dir/not-a-directory-root"
+printf 'not a directory\n' >"$blocked_model_root"
+blocked_model_profile="$contract_tmp_dir/blocked-model-root.env"
+cat >"$blocked_model_profile" <<EOF
+COMFY_MODEL_ROOT=$blocked_model_root/models
+EOF
+set +e
+blocked_model_output="$(CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" download --model civitai-file --profile "$blocked_model_profile" 2>&1 >/dev/null)"
+blocked_model_status=$?
+set -e
+if [[ "$blocked_model_status" -ne 4 ]]; then
+  printf '%s\n' "$blocked_model_output" >&2
+  die "models.sh download with unwritable COMFY_MODEL_ROOT returned $blocked_model_status, expected 4" 1
+fi
+if printf '%s\n' "$blocked_model_output" | grep -q 'Traceback'; then
+  die "models.sh download with unwritable COMFY_MODEL_ROOT printed Python traceback" 1
+fi
+if ! printf '%s\n' "$blocked_model_output" | grep -q 'unable to create model target directory'; then
+  die "models.sh download with unwritable COMFY_MODEL_ROOT did not explain target directory failure" 1
+fi
 duplicate_model_catalog="$contract_tmp_dir/duplicate-model-catalog.yaml"
 cat >"$duplicate_model_catalog" <<EOF
 version: 2
