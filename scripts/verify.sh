@@ -5,6 +5,10 @@ set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+# shellcheck source=scripts/remote/core.sh
+source "${ROOT_DIR}/scripts/remote/core.sh"
+# shellcheck source=scripts/remote/models.sh
+source "${ROOT_DIR}/scripts/remote/models.sh"
 
 usage() {
   cat <<'EOF'
@@ -156,6 +160,16 @@ expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example lo
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example plan retro-anime-photo-core --detach
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example download retro-anime-photo-core --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload retro-anime-photo-core
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to ../loras
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to /tmp/loras
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to loras//bad
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to loras --name ../bad.bin
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to loras --name bad/name.bin
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to loras --name .
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to loras --detach
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload-file --file /tmp/missing-model.bin --to loras --model civitai-file
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile .env.example --unknown
@@ -851,6 +865,11 @@ if [[ "$*" == *"./scripts/models.sh info --model civitai-file"* ]]; then
   printf 'size_bytes\t%s\n' "$COMFY_SHELL_UPLOAD_SIZE"
   printf 'source\tcivitai page=https://civitai.com/models/0/smoke\n'
 fi
+if [[ "$*" == *"models-upload-file-prepare"* ]]; then
+  printf 'ROOT\t%s\n' "$COMFY_SHELL_UPLOAD_FILE_REMOTE_ROOT"
+  printf 'TARGET\t%s\n' "$COMFY_SHELL_UPLOAD_FILE_REMOTE_PATH"
+  printf 'TMP\t%s\n' "$COMFY_SHELL_UPLOAD_FILE_REMOTE_TMP"
+fi
 EOF
 chmod +x "$ssh_stub_dir/ssh"
 rsync_argv_file="$contract_tmp_dir/rsync-argv.txt"
@@ -945,6 +964,98 @@ fi
 # shellcheck disable=SC2016
 if ! grep -Fq './scripts/models.sh install-upload --model civitai-file --file "$tmp_path"' "$ssh_argv_file"; then
   die "remote.sh models upload did not call remote install-upload" 1
+fi
+upload_file_source="$contract_tmp_dir/manual-upload.safetensors"
+printf 'manual-upload-model-data' >"$upload_file_source"
+upload_file_source="$(abs_path "$upload_file_source")"
+upload_file_remote_root="/tmp/comfy-shell-remote-models"
+upload_file_remote_path="/tmp/comfy-shell-remote-models/loras/manual-upload.safetensors"
+upload_file_remote_tmp="/tmp/comfy-shell-remote-models/loras/.manual-upload.safetensors.upload-file.12345"
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" \
+  COMFY_SHELL_RSYNC_ARGV_FILE="$rsync_argv_file" \
+  COMFY_SHELL_UPLOAD_FILE_REMOTE_ROOT="$upload_file_remote_root" \
+  COMFY_SHELL_UPLOAD_FILE_REMOTE_PATH="$upload_file_remote_path" \
+  COMFY_SHELL_UPLOAD_FILE_REMOTE_TMP="$upload_file_remote_tmp" \
+  PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" upload-file --file "$upload_file_source" --to loras >/dev/null
+if ! grep -Fq "$upload_file_source" "$rsync_argv_file"; then
+  die "remote.sh models upload-file did not rsync the requested local file" 1
+fi
+if ! grep -Fq "verify@example.com:$upload_file_remote_tmp" "$rsync_argv_file"; then
+  die "remote.sh models upload-file did not rsync to the remote temp target" 1
+fi
+if ! grep -Fq 'models-upload-file-install' "$ssh_argv_file"; then
+  die "remote.sh models upload-file did not build the remote install command" 1
+fi
+if ! grep -Fq "$upload_file_remote_path" "$ssh_argv_file"; then
+  die "remote.sh models upload-file install command did not include target path" 1
+fi
+if ! grep -Fq "$upload_file_remote_tmp" "$ssh_argv_file"; then
+  die "remote.sh models upload-file install command did not include temp path" 1
+fi
+if grep -Fq './scripts/models.sh install-upload' "$ssh_argv_file"; then
+  die "remote.sh models upload-file should not call catalog install-upload" 1
+fi
+upload_file_sha="$(local_file_sha256 "$upload_file_source")"
+upload_file_size="$(wc -c <"$upload_file_source" | tr -d ' ')"
+upload_file_remote_checkout="$contract_tmp_dir/upload-file-remote-checkout"
+upload_file_remote_model_root="$contract_tmp_dir/upload-file-model-root"
+mkdir -p "$upload_file_remote_checkout" "$upload_file_remote_model_root/loras"
+cat >"$upload_file_remote_checkout/.env" <<EOF
+COMFY_MODEL_ROOT=$upload_file_remote_model_root
+EOF
+printf 'manual-upload-model-data' >"$upload_file_remote_model_root/loras/manual-upload.safetensors"
+set +e
+upload_file_skip_output="$(bash -c "$(remote_models_upload_file_prepare_cmd "$upload_file_remote_checkout" loras manual-upload.safetensors "$upload_file_sha" "$upload_file_size")" 2>&1)"
+upload_file_skip_status=$?
+set -e
+if [[ "$upload_file_skip_status" -ne 0 || "$upload_file_skip_output" != SKIPPED$'\t'* ]]; then
+  printf '%s\n' "$upload_file_skip_output" >&2
+  die "remote upload-file prepare did not skip identical existing target" 1
+fi
+printf 'different-model-data' >"$upload_file_remote_model_root/loras/manual-upload.safetensors"
+set +e
+upload_file_conflict_output="$(bash -c "$(remote_models_upload_file_prepare_cmd "$upload_file_remote_checkout" loras manual-upload.safetensors "$upload_file_sha" "$upload_file_size")" 2>&1)"
+upload_file_conflict_status=$?
+set -e
+if [[ "$upload_file_conflict_status" -ne 4 ]]; then
+  printf '%s\n' "$upload_file_conflict_output" >&2
+  die "remote upload-file prepare did not reject different existing target" 1
+fi
+if ! printf '%s\n' "$upload_file_conflict_output" | grep -q 'remote target exists with different content'; then
+  die "remote upload-file conflict did not explain existing target mismatch" 1
+fi
+upload_file_missing_root_checkout="$contract_tmp_dir/upload-file-missing-root-checkout"
+mkdir -p "$upload_file_missing_root_checkout"
+set +e
+upload_file_missing_root_output="$(bash -c "$(remote_models_upload_file_prepare_cmd "$upload_file_missing_root_checkout" loras manual-upload.safetensors "$upload_file_sha" "$upload_file_size")" 2>&1)"
+upload_file_missing_root_status=$?
+set -e
+if [[ "$upload_file_missing_root_status" -ne 2 ]]; then
+  printf '%s\n' "$upload_file_missing_root_output" >&2
+  die "remote upload-file prepare without COMFY_MODEL_ROOT returned $upload_file_missing_root_status, expected 2" 1
+fi
+if ! printf '%s\n' "$upload_file_missing_root_output" | grep -q 'COMFY_MODEL_ROOT is required'; then
+  die "remote upload-file missing COMFY_MODEL_ROOT did not explain the missing config" 1
+fi
+upload_file_escape_root="$contract_tmp_dir/upload-file-escape-root"
+upload_file_escape_outside="$contract_tmp_dir/upload-file-escape-outside"
+upload_file_escape_checkout="$contract_tmp_dir/upload-file-escape-checkout"
+mkdir -p "$upload_file_escape_root" "$upload_file_escape_outside" "$upload_file_escape_checkout"
+ln -s "$upload_file_escape_outside" "$upload_file_escape_root/loras"
+cat >"$upload_file_escape_checkout/.env" <<EOF
+COMFY_MODEL_ROOT=$upload_file_escape_root
+EOF
+set +e
+upload_file_escape_output="$(bash -c "$(remote_models_upload_file_prepare_cmd "$upload_file_escape_checkout" loras manual-upload.safetensors "$upload_file_sha" "$upload_file_size")" 2>&1)"
+upload_file_escape_status=$?
+set -e
+if [[ "$upload_file_escape_status" -ne 4 ]]; then
+  printf '%s\n' "$upload_file_escape_output" >&2
+  die "remote upload-file prepare did not reject symlink escape" 1
+fi
+if ! printf '%s\n' "$upload_file_escape_output" | grep -q 'upload path escapes COMFY_MODEL_ROOT'; then
+  die "remote upload-file symlink escape did not explain path containment failure" 1
 fi
 set +e
 upload_mismatch_output="$(COMFY_MODEL_ROOT="$upload_root" CATALOG_FILE="$civitai_catalog" \

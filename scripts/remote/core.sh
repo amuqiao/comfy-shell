@@ -66,6 +66,21 @@ validate_model_id() {
   [[ "$value" =~ ^[A-Za-z0-9._-]+$ ]] || usage_error "model id contains invalid characters: $value" usage_models
 }
 
+validate_model_upload_dir() {
+  local value="$1"
+  [[ -n "$value" ]] || usage_error "--to requires a model directory" usage_models
+  [[ "$value" != /* && "$value" != *\\* && "$value" != *:* && "$value" != *[[:space:]]* ]] || usage_error "--to contains invalid characters: $value" usage_models
+  [[ "$value" =~ ^[A-Za-z0-9._/-]+$ ]] || usage_error "--to contains invalid characters: $value" usage_models
+  [[ "$value" != *//* && "$value" != */ ]] || usage_error "--to must not contain empty path segments" usage_models
+  [[ "$value" != "." && "$value" != ".." && "$value" != *"/../"* && "$value" != ../* && "$value" != */.. && "$value" != *"/./"* && "$value" != ./* && "$value" != */. ]] || usage_error "--to must not contain . or .. path segments" usage_models
+}
+
+validate_model_upload_name() {
+  local value="$1"
+  [[ -n "$value" ]] || usage_error "--name requires a filename" usage_models
+  [[ "$value" != "." && "$value" != ".." && "$value" != */* && "$value" != *\\* && "$value" != *:* && "$value" != *[[:space:]]* ]] || usage_error "--name must be a single filename without whitespace, slash, backslash, or colon: $value" usage_models
+}
+
 validate_profile_arg() {
   local value="$1"
   [[ "$value" != -* && "$value" != *[[:space:]]* ]] || usage_error "--profile contains invalid characters: $value" usage

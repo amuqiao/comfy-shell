@@ -133,7 +133,7 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；默认目标来自 `.env` 的 `REMOTE_HOST` / `REMOTE_DIR`。
   `remote.sh status/ready/logs` 只读查看远端状态。
-- `remote.sh models [options] <check|list|list-models|status|verify|plan|download|upload|logs>` 会通过 SSH
+- `remote.sh models [options] <check|list|list-models|status|verify|plan|download|upload|upload-file|logs>` 会通过 SSH
   进入远端 checkout 并调用远端 `./scripts/models.sh ...`。其中 `download` 会在
   远端 `COMFY_MODEL_ROOT` 写模型文件；模型清单、hash 和目标目录仍由远端
   `models.sh` 负责。`download --detach` 会在远端后台运行, 写
@@ -142,6 +142,9 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
   `.run/models-download-model-<id>.pid` 和 `logs/models-download-model-<id>.log`。
   `upload --model MODEL_ID` 会先校验本机模型文件, 再用 `rsync` 上传到远端临时文件,
   最后由远端 `models.sh install-upload` 校验 hash 后落位; 不覆盖远端已存在但校验失败的文件。
+  `upload-file --file FILE --to MODEL_DIR [--name FILENAME]` 不依赖 catalog, 用于同步
+  本机手动下载的单个模型文件到远端 `COMFY_MODEL_ROOT/MODEL_DIR/FILENAME`; 远端目标已存在且
+  内容相同会跳过, 内容不同会拒绝覆盖。
   这里的 `--profile` 只用于本机 `remote.sh` 定位远端，不会传给远端
   `models.sh`；远端模型配置读取远端 checkout 根目录 `.env`。
 
@@ -153,6 +156,7 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 ./scripts/remote.sh models plan retro-anime-photo-core
 ./scripts/remote.sh models download --model isabelia-v10-checkpoint --detach
 ./scripts/remote.sh models upload --model isabelia-v10-checkpoint
+./scripts/remote.sh models upload-file --file ./ComfyUI/models/vae/kl-f8-anime2.ckpt --to vae
 ./scripts/remote.sh models download retro-anime-photo-core --detach
 ./scripts/remote.sh models logs retro-anime-photo-core --follow
 ./scripts/remote.sh models verify retro-anime-photo-core

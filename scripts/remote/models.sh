@@ -56,6 +56,64 @@ models_info_value() {
   awk -F '\t' -v key="$key" '$1 == key { print $2; found=1; exit } END { if (!found) exit 1 }' <<<"$info"
 }
 
+local_file_sha256() {
+  python3 -c 'import hashlib, sys; h=hashlib.sha256(); f=open(sys.argv[1], "rb"); [h.update(chunk) for chunk in iter(lambda: f.read(1048576), b"")]; f.close(); print(h.hexdigest())' "$1"
+}
+
+remote_models_hash_function() {
+  cat <<'EOF'
+hash_file() {
+  python3 -c 'import hashlib, sys; h=hashlib.sha256(); f=open(sys.argv[1], "rb"); [h.update(chunk) for chunk in iter(lambda: f.read(1048576), b"")]; f.close(); print(h.hexdigest())' "$1"
+}
+EOF
+}
+
+remote_models_path_function() {
+  cat <<'EOF'
+ensure_within_model_root() {
+  python3 -c 'import pathlib, sys
+root = pathlib.Path(sys.argv[1]).resolve(strict=False)
+target = pathlib.Path(sys.argv[2]).resolve(strict=False)
+try:
+    target.relative_to(root)
+except ValueError:
+    print(f"ERROR: upload path escapes COMFY_MODEL_ROOT: {target}", file=sys.stderr)
+    sys.exit(4)
+' "$1" "$2"
+}
+EOF
+}
+
+remote_models_config_function() {
+  cat <<'EOF'
+remote_config_value() {
+  if [ -n "${COMFY_MODEL_ROOT:-}" ]; then
+    printf '%s\n' "$COMFY_MODEL_ROOT"
+    return
+  fi
+  [ -f .env ] || return 0
+  awk -v key="COMFY_MODEL_ROOT" '
+    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+    {
+      line=$0
+      sub(/^[[:space:]]*export[[:space:]]+/, "", line)
+      pattern="^[[:space:]]*" key "[[:space:]]*="
+      if (line ~ pattern) {
+        sub(/^[^=]*=/, "", line)
+        sub(/[[:space:]]+#.*$/, "", line)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+        if (line ~ /^".*"$/ || line ~ /^'\''.*'\''$/) {
+          line=substr(line, 2, length(line) - 2)
+        }
+        value=line
+      }
+    }
+    END { if (value != "") print value }
+  ' .env
+}
+EOF
+}
+
 remote_models_upload_tmp_path() {
   local target_path="$1"
   local model_id="$2"
@@ -64,6 +122,37 @@ remote_models_upload_tmp_path() {
   target_dir="$(dirname "$target_path")"
   target_base="$(basename "$target_path")"
   printf '%s/.%s.upload.%s.%s\n' "$target_dir" "$target_base" "$model_id" "$$"
+}
+
+remote_models_upload_file_prepare_cmd() {
+  local dir="$1"
+  local model_dir="$2"
+  local filename="$3"
+  local expected_sha="$4"
+  local expected_size="$5"
+  local hash_function
+  local path_function
+  local config_function
+  hash_function="$(remote_models_hash_function)"
+  path_function="$(remote_models_path_function)"
+  config_function="$(remote_models_config_function)"
+  # shellcheck disable=SC2016
+  printf 'set -eu; cd %q; action=models-upload-file-prepare; command -v python3 >/dev/null 2>&1 || { printf "ERROR: missing required command: python3\n" >&2; exit 2; }; %s\n%s\n%s\nmodel_dir=%q; filename=%q; expected_sha=%q; expected_size=%q; model_root="$(remote_config_value)"; if [ -z "$model_root" ]; then printf "ERROR: COMFY_MODEL_ROOT is required in remote .env or environment\n" >&2; exit 2; fi; case "$model_root" in /*) ;; *) model_root="$PWD/$model_root" ;; esac; target_dir="${model_root%%%%/}/$model_dir"; target_path="$target_dir/$filename"; tmp_path="$target_dir/.$filename.upload-file.$$"; ensure_within_model_root "$model_root" "$target_path"; ensure_within_model_root "$model_root" "$tmp_path"; mkdir -p "$target_dir"; ensure_within_model_root "$model_root" "$target_path"; ensure_within_model_root "$model_root" "$tmp_path"; if [ -e "$target_path" ]; then actual_size=$(wc -c <"$target_path" | tr -d " "); actual_sha=$(hash_file "$target_path"); if [ "$actual_size" = "$expected_size" ] && [ "$actual_sha" = "$expected_sha" ]; then printf "SKIPPED\tmodels-upload-file\tremote target already identical: %%s\n" "$target_path"; exit 0; fi; printf "ERROR: remote target exists with different content: %%s\n" "$target_path" >&2; exit 4; fi; rm -f "$tmp_path"; printf "ROOT\t%%s\n" "$model_root"; printf "TARGET\t%%s\n" "$target_path"; printf "TMP\t%%s\n" "$tmp_path"\n' "$dir" "$hash_function" "$path_function" "$config_function" "$model_dir" "$filename" "$expected_sha" "$expected_size"
+}
+
+remote_models_upload_file_install_cmd() {
+  local dir="$1"
+  local model_root="$2"
+  local target_path="$3"
+  local tmp_path="$4"
+  local expected_sha="$5"
+  local expected_size="$6"
+  local hash_function
+  local path_function
+  hash_function="$(remote_models_hash_function)"
+  path_function="$(remote_models_path_function)"
+  # shellcheck disable=SC2016
+  printf 'set -eu; cd %q; action=models-upload-file-install; command -v python3 >/dev/null 2>&1 || { printf "ERROR: missing required command: python3\n" >&2; exit 2; }; %s\n%s\nmodel_root=%q; target_path=%q; tmp_path=%q; expected_sha=%q; expected_size=%q; ensure_within_model_root "$model_root" "$target_path"; ensure_within_model_root "$model_root" "$tmp_path"; trap '"'"'rm -f "$tmp_path"'"'"' EXIT; if [ ! -f "$tmp_path" ]; then printf "ERROR: upload temp file missing: %%s\n" "$tmp_path" >&2; exit 4; fi; actual_size=$(wc -c <"$tmp_path" | tr -d " "); if [ "$actual_size" != "$expected_size" ]; then printf "ERROR: upload temp size mismatch: %%s != %%s\n" "$actual_size" "$expected_size" >&2; exit 4; fi; actual_sha=$(hash_file "$tmp_path"); if [ "$actual_sha" != "$expected_sha" ]; then printf "ERROR: upload temp sha256 mismatch: %%s\n" "$actual_sha" >&2; exit 4; fi; if [ -e "$target_path" ]; then target_size=$(wc -c <"$target_path" | tr -d " "); target_sha=$(hash_file "$target_path"); if [ "$target_size" = "$expected_size" ] && [ "$target_sha" = "$expected_sha" ]; then printf "SKIPPED\tmodels-upload-file\tremote target already identical: %%s\n" "$target_path"; rm -f "$tmp_path"; trap - EXIT; exit 0; fi; printf "ERROR: remote target exists with different content: %%s\n" "$target_path" >&2; exit 4; fi; mkdir -p "$(dirname "$target_path")"; ensure_within_model_root "$model_root" "$target_path"; ensure_within_model_root "$model_root" "$tmp_path"; mv "$tmp_path" "$target_path"; trap - EXIT; printf "SUCCESS\tmodels-upload-file\t%%s\n" "$target_path"\n' "$dir" "$hash_function" "$path_function" "$model_root" "$target_path" "$tmp_path" "$expected_sha" "$expected_size"
 }
 
 remote_models_upload_preflight_cmd() {
@@ -92,6 +181,9 @@ handle_remote_models() {
   models_command=""
   models_bundle=""
   models_model=""
+  models_file=""
+  models_to=""
+  models_name=""
   models_detach=false
   models_tail=""
   models_follow=false
@@ -103,7 +195,7 @@ handle_remote_models() {
           usage_models
           exit 0
           ;;
-        check|list|list-models|status|verify|plan|download|upload|logs)
+        check|list|list-models|status|verify|plan|download|upload|upload-file|logs)
           models_command="$1"
           shift
           ;;
@@ -144,6 +236,24 @@ handle_remote_models() {
             usage_error "--model is not supported for models ${models_command}" usage_models
             ;;
         esac
+        ;;
+      --file)
+        [[ "$models_command" == "upload-file" ]] || usage_error "--file is only supported for models upload-file" usage_models
+        [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--file requires a file path" usage_models
+        models_file="$2"
+        shift 2
+        ;;
+      --to)
+        [[ "$models_command" == "upload-file" ]] || usage_error "--to is only supported for models upload-file" usage_models
+        [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--to requires a model directory" usage_models
+        models_to="$2"
+        shift 2
+        ;;
+      --name)
+        [[ "$models_command" == "upload-file" ]] || usage_error "--name is only supported for models upload-file" usage_models
+        [[ $# -ge 2 && -n "${2:-}" ]] || usage_error "--name requires a filename" usage_models
+        models_name="$2"
+        shift 2
         ;;
       --tail)
         [[ "$models_command" == "logs" ]] || usage_error "--tail is only supported for models logs" usage_models
@@ -194,6 +304,21 @@ handle_remote_models() {
       [[ -z "$models_bundle" ]] || usage_error "models upload requires --model and takes no bundle" usage_models
       [[ -n "$models_model" ]] || usage_error "models upload requires --model MODEL_ID" usage_models
       [[ "$models_detach" == false ]] || usage_error "models upload does not support --detach" usage_models
+      ;;
+    upload-file)
+      [[ -z "$models_bundle" ]] || usage_error "models upload-file takes no bundle argument" usage_models
+      [[ -z "$models_model" ]] || usage_error "models upload-file does not support --model" usage_models
+      [[ "$models_detach" == false ]] || usage_error "models upload-file does not support --detach" usage_models
+      [[ -n "$models_file" ]] || usage_error "models upload-file requires --file FILE" usage_models
+      [[ -n "$models_to" ]] || usage_error "models upload-file requires --to MODEL_DIR" usage_models
+      validate_model_upload_dir "$models_to"
+      models_file="$(abs_path "$models_file")"
+      [[ -f "$models_file" ]] || die "local upload file not found: $models_file" 2
+      [[ -s "$models_file" ]] || die "local upload file is empty: $models_file" 2
+      if [[ -z "$models_name" ]]; then
+        models_name="$(basename "$models_file")"
+      fi
+      validate_model_upload_name "$models_name"
       ;;
     logs)
       [[ -n "$models_bundle" || -n "$models_model" ]] || usage_error "models logs requires one bundle or --model MODEL_ID" usage_models
@@ -268,6 +393,42 @@ handle_remote_models() {
       "rsync $local_path -> ${host}:${remote_tmp_path}" \
       "$install_command"
     rsync_args=(-avh --progress --rsh "ssh -o ConnectTimeout=10" "$local_path" "${host}:$remote_tmp_path")
+    print_command rsync "${rsync_args[@]}"
+    rsync "${rsync_args[@]}"
+    ssh_args=(ssh -o ConnectTimeout=10 "$host" "$install_command")
+    exec "${ssh_args[@]}"
+  elif [[ "$models_command" == "upload-file" ]]; then
+    require_cmd rsync
+    require_cmd python3
+    local_size="$(wc -c <"$models_file" | tr -d ' ')"
+    local_sha="$(local_file_sha256 "$models_file")"
+    preflight_command="$(remote_models_upload_file_prepare_cmd "$remote_dir" "$models_to" "$models_name" "$local_sha" "$local_size")"
+    preflight_output="$(ssh -o ConnectTimeout=10 "$host" "$preflight_command")"
+    if [[ "$preflight_output" == SKIPPED$'\t'* ]]; then
+      print_remote_plan \
+        "models upload-file" \
+        "$host" \
+        "$remote_dir" \
+        "$profile" \
+        "" \
+        "$preflight_command"
+      printf '%s\n' "$preflight_output"
+      exit 0
+    fi
+    remote_model_root="$(models_info_value "$preflight_output" ROOT)" || die "unable to resolve remote upload-file model root" 2
+    remote_path="$(models_info_value "$preflight_output" TARGET)" || die "unable to resolve remote upload-file target path" 2
+    remote_tmp_path="$(models_info_value "$preflight_output" TMP)" || die "unable to resolve remote upload-file temp path" 2
+    install_command="$(remote_models_upload_file_install_cmd "$remote_dir" "$remote_model_root" "$remote_path" "$remote_tmp_path" "$local_sha" "$local_size")"
+    print_remote_plan \
+      "models upload-file" \
+      "$host" \
+      "$remote_dir" \
+      "$profile" \
+      "" \
+      "$preflight_command" \
+      "rsync $models_file -> ${host}:${remote_tmp_path}" \
+      "$install_command"
+    rsync_args=(-avh --progress --rsh "ssh -o ConnectTimeout=10" "$models_file" "${host}:$remote_tmp_path")
     print_command rsync "${rsync_args[@]}"
     rsync "${rsync_args[@]}"
     ssh_args=(ssh -o ConnectTimeout=10 "$host" "$install_command")

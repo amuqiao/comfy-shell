@@ -166,6 +166,16 @@ ssh wangqiao@47.94.108.140 'cd /data/wangqiao/comfy-shell && cp .env.remote.exam
 
 `upload --model` 会先校验本机文件，再上传到远端临时文件，最后由远端 `models.sh` 校验 hash 后移动到 target。远端 target 已存在且校验通过时会跳过；远端 target 已存在但校验失败时会拒绝覆盖。
 
+上传未登记到 catalog 的本机单个模型文件：
+
+```bash
+./scripts/remote.sh models upload-file --file ./ComfyUI/models/vae/kl-f8-anime2.ckpt --to vae
+./scripts/remote.sh models upload-file --file ./ComfyUI/models/upscale_models/4x-UltraSharp.pth --to upscale_models
+./scripts/remote.sh models upload-file --file ~/Downloads/foo.safetensors --to loras --name foo.safetensors
+```
+
+`upload-file` 不读取 `catalog.yaml`，只负责把本机文件同步到远端 `COMFY_MODEL_ROOT/<to>/<name>`。它会先上传到远端临时文件，再校验 `size/sha256`；远端 target 已存在且内容相同会跳过，内容不同会拒绝覆盖。
+
 ## Manual 模型怎么补
 
 `Manual` 不是脚本坏了，而是 catalog 没有足够信息保证自动下载一定拿到正确文件。

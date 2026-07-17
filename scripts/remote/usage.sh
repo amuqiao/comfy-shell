@@ -15,7 +15,7 @@ usage() {
   ./scripts/remote.sh restart --yes [options]
   ./scripts/remote.sh status [options]
   ./scripts/remote.sh logs [--tail N|all] [--follow] [options]
-  ./scripts/remote.sh models [options] <check|list|list-models|status|verify|plan|download|upload|logs> [bundle|--model MODEL_ID]
+  ./scripts/remote.sh models [options] <check|list|list-models|status|verify|plan|download|upload|upload-file|logs> [...]
   ./scripts/remote.sh ready [--url URL] [options]
   ./scripts/remote.sh tunnel [--local-port PORT] [--remote-host HOST] [--remote-port PORT] [--dry-run] [options]
   ./scripts/remote.sh gpu [--connect-timeout SECONDS] [--json] [options]
@@ -206,6 +206,7 @@ usage_models() {
   ./scripts/remote.sh models [options] plan <bundle|--model MODEL_ID>
   ./scripts/remote.sh models [options] download <bundle|--model MODEL_ID> [--detach]
   ./scripts/remote.sh models [options] upload --model MODEL_ID
+  ./scripts/remote.sh models [options] upload-file --file FILE --to MODEL_DIR [--name FILENAME]
   ./scripts/remote.sh models [options] logs <bundle|--model MODEL_ID> [--tail N|all] [--follow]
 
 选项:
@@ -226,6 +227,7 @@ usage_models() {
   remote.sh models 是远端模型操作入口, 只负责 SSH 和远端 checkout 定位。
   模型清单、hash、下载和 COMFY_MODEL_ROOT 由远端 ./scripts/models.sh 负责。
   upload --model 从本机 COMFY_MODEL_ROOT 读取已校验文件, 上传到远端 COMFY_MODEL_ROOT。
+  upload-file 不依赖 catalog, 从本机任意 FILE 上传到远端 COMFY_MODEL_ROOT/MODEL_DIR/FILENAME。
   不支持远端 inspect, 也不代理远端 models.sh 子命令帮助。
   workflow 文件解析请在本机使用 ./scripts/models.sh inspect。
 
@@ -235,6 +237,7 @@ usage_models() {
   download --detach 会在远端后台运行, 写 .run/models-download-<bundle>.pid
   或 .run/models-download-model-<id>.pid, 以及对应 logs/*.log。
   upload --model 会用 rsync 上传本机已校验模型到远端临时文件, 再由远端 models.sh 校验后落位。
+  upload-file 会用 rsync 上传本机文件到远端临时文件, 校验 size/sha256 后落位; 远端 target 已存在且内容相同会跳过, 内容不同会拒绝覆盖。
 
 常用示例:
   ./scripts/remote.sh models check
@@ -247,6 +250,8 @@ usage_models() {
   ./scripts/remote.sh models download --model isabelia-v10-checkpoint --detach
   ./scripts/remote.sh models download retro-anime-photo-core --detach
   ./scripts/remote.sh models upload --model isabelia-v10-checkpoint
+  ./scripts/remote.sh models upload-file --file ./ComfyUI/models/vae/kl-f8-anime2.ckpt --to vae
+  ./scripts/remote.sh models upload-file --file ~/Downloads/foo.safetensors --to loras --name foo.safetensors
   ./scripts/remote.sh models logs --model isabelia-v10-checkpoint --follow
   ./scripts/remote.sh models logs retro-anime-photo-core --follow
 EOF
