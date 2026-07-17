@@ -8,6 +8,7 @@
 |---|---|
 | [AI 女主短视频 MVP 生产线](ai-heroine-content-pipeline.md) | 打开页面模板或现成 workflow，补缺模型，产出第一条可发布成片 |
 | [模型管理](models.md) | 说明页面缺模型怎么补，以及 `models.sh` 为什么只是跑通后的复现工具 |
+| [模型命令速查](models-cheatsheet.md) | 本机和远端模型检查、下载、后台日志、复查命令 |
 
 ## 当前心智模型
 

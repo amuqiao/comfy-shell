@@ -88,6 +88,7 @@ fi
 
 section "Python Syntax"
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/comfy-shell-pycache" python3 -m py_compile \
+  "${ROOT_DIR}"/scripts/models/*.py \
   "${ROOT_DIR}/scripts/lib/models_cli.py" \
   "${ROOT_DIR}/scripts/lib/remote_gpu_format.py"
 
@@ -102,7 +103,7 @@ section "Help Smoke"
 for subcmd in bootstrap start stop restart status logs; do
   "${ROOT_DIR}/scripts/local.sh" "$subcmd" -h >/dev/null
 done
-for subcmd in check list inspect status verify plan download; do
+for subcmd in check list list-models inspect status verify plan download info install-upload; do
   "${ROOT_DIR}/scripts/models.sh" "$subcmd" -h >/dev/null
 done
 for subcmd in sync bootstrap start stop restart status logs models ready tunnel gpu; do
@@ -115,6 +116,7 @@ COMFY_DEVICE=cpu "${ROOT_DIR}/scripts/check_env.sh" --profile .env.example --no-
 "${ROOT_DIR}/scripts/models.sh" check >/dev/null
 COMFY_MODEL_ROOT='' "${ROOT_DIR}/scripts/models.sh" check >/dev/null
 "${ROOT_DIR}/scripts/models.sh" list >/dev/null
+"${ROOT_DIR}/scripts/models.sh" list-models retro-anime-photo-core >/dev/null
 "${ROOT_DIR}/scripts/models.sh" inspect "${ROOT_DIR}/.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png" >/dev/null
 bad_workflow_file="$(mktemp "${TMPDIR:-/tmp}/comfy-shell-bad-workflow.XXXXXX")"
 printf '{bad-json\n' >"$bad_workflow_file"
@@ -135,11 +137,16 @@ COMFY_MODEL_ROOT=/tmp/comfy-shell-read-only-models
 EOF
 "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$read_only_model_profile" >/dev/null
 "${ROOT_DIR}/scripts/models.sh" plan retro-anime-photo-core --profile "$read_only_model_profile" >/dev/null
+"${ROOT_DIR}/scripts/models.sh" plan --model isabelia-v10-checkpoint --profile "$read_only_model_profile" >/dev/null
+"${ROOT_DIR}/scripts/models.sh" info --model isabelia-v10-checkpoint --profile "$read_only_model_profile" >/dev/null
 expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify retro-anime-photo-core --profile "$read_only_model_profile"
+expect_status 1 "${ROOT_DIR}/scripts/models.sh" verify --model isabelia-v10-checkpoint --profile "$read_only_model_profile"
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" status --model isabelia-v10-checkpoint --model retro-anime-lora --profile "$read_only_model_profile"
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" download
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" check --profile "$read_only_model_profile"
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" check retro-anime-photo-core
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" list --profile "$read_only_model_profile"
+expect_status 2 "${ROOT_DIR}/scripts/models.sh" list-models --profile "$read_only_model_profile"
 rm -f "$read_only_model_profile"
 "${ROOT_DIR}/scripts/remote.sh" tunnel --profile .env.example --local-port 18188 --dry-run >/dev/null
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example inspect .data/nodes/workflow.png
@@ -148,6 +155,7 @@ expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example lo
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example logs retro-anime-photo-core --tail
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example plan retro-anime-photo-core --detach
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example download retro-anime-photo-core --profile .env.example
+expect_status 2 "${ROOT_DIR}/scripts/remote.sh" models --profile .env.example upload retro-anime-photo-core
 expect_status 2 "${ROOT_DIR}/scripts/local.sh" status --unknown
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" sync --profile .env.example
 expect_status 2 "${ROOT_DIR}/scripts/remote.sh" status --profile .env.example --unknown
@@ -210,6 +218,8 @@ fi
 if ! COMFY_MODEL_ROOT=/tmp/comfy-shell-env-models "${ROOT_DIR}/scripts/models.sh" plan heroine-i2v-core --profile "$contract_profile" | grep -q '/tmp/comfy-shell-env-models'; then
   die "exported COMFY_MODEL_ROOT did not override explicit --profile file" 1
 fi
+COMFY_MODEL_ROOT=/tmp/comfy-shell-env-without-profile-models \
+  "${ROOT_DIR}/scripts/models.sh" info --model isabelia-v10-checkpoint --profile "$contract_tmp_dir/missing-model-profile.env" >/dev/null
 hf_payload="model-data"
 hf_sha="$(printf '%s' "$hf_payload" | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')"
 hf_size="$(printf '%s' "$hf_payload" | wc -c | tr -d ' ')"
@@ -314,7 +324,6 @@ bundles:
           platform: unknown
         download:
           mode: manual
-          method: browser
           reason: smoke manual entry
       - id: blocked-file
         directory: controlnet
@@ -324,10 +333,6 @@ bundles:
           page_url: https://huggingface.co/smoke/repo
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: smoke/repo
-          path: blocked.bin
           reason: smoke blocked entry
 EOF
 civitai_profile="$contract_tmp_dir/civitai-profile.env"
@@ -351,6 +356,120 @@ for expected_summary in 'success: 1' 'manual: 1' 'blocked: 1' 'failed: 0'; do
     die "models.sh download summary missing: $expected_summary" 1
   fi
 done
+single_civitai_profile="$contract_tmp_dir/single-civitai-profile.env"
+cat >"$single_civitai_profile" <<'EOF'
+COMFY_MODEL_ROOT=/tmp/comfy-shell-single-civitai-profile-models
+EOF
+rm -rf /tmp/comfy-shell-single-civitai-profile-models
+CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" download --model civitai-file --profile "$single_civitai_profile" >/dev/null
+if [[ ! -f /tmp/comfy-shell-single-civitai-profile-models/loras/civitai.bin ]]; then
+  die "models.sh download --model did not write target file" 1
+fi
+CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" verify --model civitai-file --profile "$single_civitai_profile" >/dev/null
+expect_status 1 env CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" download --model manual-file --profile "$single_civitai_profile"
+duplicate_model_catalog="$contract_tmp_dir/duplicate-model-catalog.yaml"
+cat >"$duplicate_model_catalog" <<EOF
+version: 2
+bundles:
+  duplicate-a:
+    title: Duplicate A
+    models:
+      - id: duplicate-model
+        directory: loras
+        filename: duplicate.bin
+        source:
+          platform: civitai
+          page_url: https://civitai.com/models/1/duplicate
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file
+          sha256: $civitai_sha
+          size_bytes: $civitai_size
+  duplicate-b:
+    title: Duplicate B
+    models:
+      - id: duplicate-model
+        directory: loras
+        filename: duplicate.bin
+        source:
+          platform: civitai
+          page_url: https://civitai.com/models/2/duplicate
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file?variant=2
+          sha256: $civitai_sha
+          size_bytes: $civitai_size
+EOF
+set +e
+duplicate_info_output="$(CATALOG_FILE="$duplicate_model_catalog" "${ROOT_DIR}/scripts/models.sh" info --model duplicate-model --profile "$single_civitai_profile" 2>&1 >/dev/null)"
+duplicate_info_status=$?
+duplicate_status_output="$(CATALOG_FILE="$duplicate_model_catalog" "${ROOT_DIR}/scripts/models.sh" status --model duplicate-model --profile "$single_civitai_profile" 2>&1 >/dev/null)"
+duplicate_status_status=$?
+set -e
+if [[ "$duplicate_info_status" -ne 2 || "$duplicate_status_status" -ne 2 ]]; then
+  printf '%s\n' "$duplicate_info_output" "$duplicate_status_output" >&2
+  die "models.sh --model accepted conflicting duplicate model declarations" 1
+fi
+if ! printf '%s\n%s\n' "$duplicate_info_output" "$duplicate_status_output" | grep -q 'source.page_url differs:'; then
+  die "models.sh duplicate model conflict did not explain source.page_url mismatch" 1
+fi
+if ! printf '%s\n%s\n' "$duplicate_info_output" "$duplicate_status_output" | grep -q 'download.url differs:'; then
+  die "models.sh duplicate model conflict did not explain download.url mismatch" 1
+fi
+target_conflict_catalog="$contract_tmp_dir/target-conflict-catalog.yaml"
+cat >"$target_conflict_catalog" <<EOF
+version: 2
+bundles:
+  target-a:
+    title: Target A
+    models:
+      - id: target-model-a
+        directory: loras
+        filename: shared-target.bin
+        source:
+          platform: civitai
+          page_url: https://civitai.com/models/1/shared
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file
+          sha256: $civitai_sha
+          size_bytes: $civitai_size
+  target-b:
+    title: Target B
+    models:
+      - id: target-model-b
+        directory: loras
+        filename: shared-target.bin
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/smoke/shared
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: smoke/shared
+          path: shared-target.bin
+          sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+          size_bytes: $civitai_size
+EOF
+set +e
+target_conflict_info_output="$(CATALOG_FILE="$target_conflict_catalog" "${ROOT_DIR}/scripts/models.sh" info --model target-model-a --profile "$single_civitai_profile" 2>&1 >/dev/null)"
+target_conflict_info_status=$?
+target_conflict_status_output="$(CATALOG_FILE="$target_conflict_catalog" "${ROOT_DIR}/scripts/models.sh" status --model target-model-a --profile "$single_civitai_profile" 2>&1 >/dev/null)"
+target_conflict_status_status=$?
+target_conflict_download_output="$(CATALOG_FILE="$target_conflict_catalog" "${ROOT_DIR}/scripts/models.sh" download --model target-model-a --profile "$single_civitai_profile" 2>&1 >/dev/null)"
+target_conflict_download_status=$?
+set -e
+if [[ "$target_conflict_info_status" -ne 2 || "$target_conflict_status_status" -ne 2 || "$target_conflict_download_status" -ne 2 ]]; then
+  printf '%s\n' "$target_conflict_info_output" "$target_conflict_status_output" "$target_conflict_download_output" >&2
+  die "models.sh --model accepted conflicting same-target declarations" 1
+fi
+if ! printf '%s\n%s\n%s\n' "$target_conflict_info_output" "$target_conflict_status_output" "$target_conflict_download_output" | grep -q 'model target loras/shared-target.bin has conflicting catalog declarations'; then
+  die "models.sh same-target conflict did not explain target conflict" 1
+fi
 status_smoke_root="$contract_tmp_dir/status-models"
 mkdir -p "$status_smoke_root/checkpoints" "$status_smoke_root/loras"
 printf 'model-data' >"$status_smoke_root/checkpoints/ok.bin"
@@ -399,7 +518,6 @@ bundles:
           platform: unknown
         download:
           mode: manual
-          method: browser
           reason: status manual entry
       - id: blocked-file
         directory: loras
@@ -408,10 +526,6 @@ bundles:
           platform: huggingface
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: smoke/repo
-          path: blocked.bin
           reason: status blocked entry
   status-b:
     title: Status B
@@ -462,7 +576,6 @@ bundles:
           platform: unknown
         download:
           mode: manual
-          method: browser
           reason: mixed manual entry
   mixed-auto:
     title: Mixed Auto
@@ -587,6 +700,80 @@ fi
 if printf '%s\n' "$bad_size_output" | grep -q 'Traceback'; then
   die "models.sh bad size_bytes printed Python traceback" 1
 fi
+escaped_path_catalog="$contract_tmp_dir/escaped-path-catalog.yaml"
+cat >"$escaped_path_catalog" <<EOF
+version: 2
+bundles:
+  escaped-path:
+    title: Escaped Path
+    models:
+      - id: escaped-file
+        directory: ../escaped
+        filename: escaped.bin
+        source:
+          platform: civitai
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file
+          sha256: $civitai_sha
+EOF
+set +e
+escaped_path_output="$(CATALOG_FILE="$escaped_path_catalog" "${ROOT_DIR}/scripts/models.sh" check 2>&1 >/dev/null)"
+escaped_path_status=$?
+set -e
+if [[ "$escaped_path_status" -ne 2 ]]; then
+  die "models.sh accepted model directory escaping COMFY_MODEL_ROOT, expected exit 2" 1
+fi
+if ! printf '%s\n' "$escaped_path_output" | grep -q "directory must not contain empty, '.', or '..' path segments"; then
+  die "models.sh escaped directory rejection did not explain path segment rule" 1
+fi
+escaped_filename_catalog="$contract_tmp_dir/escaped-filename-catalog.yaml"
+cat >"$escaped_filename_catalog" <<EOF
+version: 2
+bundles:
+  escaped-filename:
+    title: Escaped Filename
+    models:
+      - id: escaped-filename
+        directory: loras
+        filename: ../escaped.bin
+        source:
+          platform: civitai
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file
+          sha256: $civitai_sha
+EOF
+expect_status 2 env CATALOG_FILE="$escaped_filename_catalog" "${ROOT_DIR}/scripts/models.sh" check
+manual_auto_key_catalog="$contract_tmp_dir/manual-auto-key-catalog.yaml"
+cat >"$manual_auto_key_catalog" <<EOF
+version: 2
+bundles:
+  manual-auto-key:
+    title: Manual Auto Key
+    models:
+      - id: manual-auto-key
+        directory: loras
+        filename: manual.bin
+        source:
+          platform: unknown
+        download:
+          mode: manual
+          method: browser
+          reason: manual entries must not keep auto-only keys
+EOF
+set +e
+manual_auto_key_output="$(CATALOG_FILE="$manual_auto_key_catalog" "${ROOT_DIR}/scripts/models.sh" check 2>&1 >/dev/null)"
+manual_auto_key_status=$?
+set -e
+if [[ "$manual_auto_key_status" -ne 2 ]]; then
+  die "models.sh accepted auto-only download keys on manual entry, expected exit 2" 1
+fi
+if ! printf '%s\n' "$manual_auto_key_output" | grep -q 'uses auto-only keys with mode=manual'; then
+  die "models.sh manual auto-key rejection did not explain mode mismatch" 1
+fi
 missing_model_profile="$contract_tmp_dir/no-model-root.env"
 cat >"$missing_model_profile" <<'EOF'
 COMFY_PROFILE=verify-missing-model-root
@@ -622,8 +809,27 @@ mkdir -p "$ssh_stub_dir"
 cat >"$ssh_stub_dir/ssh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$COMFY_SHELL_SSH_ARGV_FILE"
+if [[ "$*" == *"./scripts/models.sh info --model civitai-file"* ]]; then
+  printf 'id\tcivitai-file\n'
+  printf 'bundles\tcivitai-smoke\n'
+  printf 'target\tloras/civitai.bin\n'
+  printf 'path\t%s\n' "$COMFY_SHELL_UPLOAD_REMOTE_PATH"
+  printf 'directory\tloras\n'
+  printf 'filename\tcivitai.bin\n'
+  printf 'mode\tauto\n'
+  printf 'method\tcivitai\n'
+  printf 'sha256\t%s\n' "$COMFY_SHELL_UPLOAD_SHA"
+  printf 'size_bytes\t%s\n' "$COMFY_SHELL_UPLOAD_SIZE"
+  printf 'source\tcivitai page=https://civitai.com/models/0/smoke\n'
+fi
 EOF
 chmod +x "$ssh_stub_dir/ssh"
+rsync_argv_file="$contract_tmp_dir/rsync-argv.txt"
+cat >"$ssh_stub_dir/rsync" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"$COMFY_SHELL_RSYNC_ARGV_FILE"
+EOF
+chmod +x "$ssh_stub_dir/rsync"
 COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
   "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" check >/dev/null
 if ! grep -Fxq 'cd /tmp/comfy-shell-remote && ./scripts/models.sh check' "$ssh_argv_file"; then
@@ -638,15 +844,20 @@ if ! grep -Fxq 'cd /tmp/comfy-shell-remote && ./scripts/models.sh plan retro-ani
   die "remote.sh models did not build the expected remote models.sh command" 1
 fi
 COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" status --model isabelia-v10-checkpoint >/dev/null
+if ! grep -Fxq 'cd /tmp/comfy-shell-remote && ./scripts/models.sh status --model isabelia-v10-checkpoint' "$ssh_argv_file"; then
+  die "remote.sh models did not build the expected remote models.sh --model command" 1
+fi
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
   "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" download retro-anime-photo-core --detach >/dev/null
 if ! grep -Fq 'nohup sh -c' "$ssh_argv_file"; then
   die "remote.sh models download --detach did not build a nohup shell wrapper" 1
 fi
 # shellcheck disable=SC2016
-if ! grep -Fq './scripts/models.sh download "$bundle"' "$ssh_argv_file"; then
+if ! grep -Fq './scripts/models.sh download retro-anime-photo-core' "$ssh_argv_file"; then
   die "remote.sh models download --detach did not keep the remote models.sh download argv" 1
 fi
-if ! grep -Fq 'models-download retro-anime-photo-core' "$ssh_argv_file"; then
+if ! grep -Fq 'models-download .run/models-download-retro-anime-photo-core.pid' "$ssh_argv_file"; then
   die "remote.sh models download --detach did not tag the remote process with the bundle" 1
 fi
 if ! grep -Fq '.run/models-download-retro-anime-photo-core.pid' "$ssh_argv_file"; then
@@ -654,6 +865,17 @@ if ! grep -Fq '.run/models-download-retro-anime-photo-core.pid' "$ssh_argv_file"
 fi
 if ! grep -Fq 'logs/models-download-retro-anime-photo-core.log' "$ssh_argv_file"; then
   die "remote.sh models download --detach did not write the expected log path" 1
+fi
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" download --model isabelia-v10-checkpoint --detach >/dev/null
+if ! grep -Fq './scripts/models.sh download --model isabelia-v10-checkpoint' "$ssh_argv_file"; then
+  die "remote.sh models download --model --detach did not keep the remote models.sh argv" 1
+fi
+if ! grep -Fq '.run/models-download-model-isabelia-v10-checkpoint.pid' "$ssh_argv_file"; then
+  die "remote.sh models download --model --detach did not write the expected pid path" 1
+fi
+if ! grep -Fq 'logs/models-download-model-isabelia-v10-checkpoint.log' "$ssh_argv_file"; then
+  die "remote.sh models download --model --detach did not write the expected log path" 1
 fi
 COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
   "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" logs retro-anime-photo-core >/dev/null
@@ -664,6 +886,54 @@ COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
   "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" logs retro-anime-photo-core --tail all --follow >/dev/null
 if ! grep -Fxq 'cd /tmp/comfy-shell-remote && if [ ! -f logs/models-download-retro-anime-photo-core.log ]; then printf "ERROR: remote model log not found: logs/models-download-retro-anime-photo-core.log\n" >&2; exit 2; fi; tail -n +1 -F logs/models-download-retro-anime-photo-core.log' "$ssh_argv_file"; then
   die "remote.sh models logs --tail all --follow did not build the expected tail command" 1
+fi
+COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" logs --model isabelia-v10-checkpoint --tail all --follow >/dev/null
+if ! grep -Fxq 'cd /tmp/comfy-shell-remote && if [ ! -f logs/models-download-model-isabelia-v10-checkpoint.log ]; then printf "ERROR: remote model log not found: logs/models-download-model-isabelia-v10-checkpoint.log\n" >&2; exit 2; fi; tail -n +1 -F logs/models-download-model-isabelia-v10-checkpoint.log' "$ssh_argv_file"; then
+  die "remote.sh models logs --model --tail all --follow did not build the expected tail command" 1
+fi
+upload_root="$contract_tmp_dir/upload-model-root"
+mkdir -p "$upload_root/loras"
+cp "$civitai_payload_file" "$upload_root/loras/civitai.bin"
+upload_remote_path="/tmp/comfy-shell-remote-models/loras/civitai.bin"
+COMFY_MODEL_ROOT="$upload_root" CATALOG_FILE="$civitai_catalog" \
+  COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" \
+  COMFY_SHELL_RSYNC_ARGV_FILE="$rsync_argv_file" \
+  COMFY_SHELL_UPLOAD_REMOTE_PATH="$upload_remote_path" \
+  COMFY_SHELL_UPLOAD_SHA="$civitai_sha" \
+  COMFY_SHELL_UPLOAD_SIZE="$civitai_size" \
+  PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" upload --model civitai-file >/dev/null
+if ! grep -Fq '/upload-model-root/loras/civitai.bin' "$rsync_argv_file"; then
+  die "remote.sh models upload did not rsync the local verified model file" 1
+fi
+if ! grep -Fq 'verify@example.com:/tmp/comfy-shell-remote-models/loras/.civitai.bin.upload.civitai-file.' "$rsync_argv_file"; then
+  die "remote.sh models upload did not rsync to the expected remote temp target" 1
+fi
+if ! grep -Fq 'tmp_path=/tmp/comfy-shell-remote-models/loras/.civitai.bin.upload.civitai-file.' "$ssh_argv_file"; then
+  die "remote.sh models upload did not set remote temp path" 1
+fi
+# shellcheck disable=SC2016
+if ! grep -Fq './scripts/models.sh install-upload --model civitai-file --file "$tmp_path"' "$ssh_argv_file"; then
+  die "remote.sh models upload did not call remote install-upload" 1
+fi
+set +e
+upload_mismatch_output="$(COMFY_MODEL_ROOT="$upload_root" CATALOG_FILE="$civitai_catalog" \
+  COMFY_SHELL_SSH_ARGV_FILE="$ssh_argv_file" \
+  COMFY_SHELL_RSYNC_ARGV_FILE="$rsync_argv_file" \
+  COMFY_SHELL_UPLOAD_REMOTE_PATH="$upload_remote_path" \
+  COMFY_SHELL_UPLOAD_SHA="0000000000000000000000000000000000000000000000000000000000000000" \
+  COMFY_SHELL_UPLOAD_SIZE="$civitai_size" \
+  PATH="$ssh_stub_dir:$PATH" \
+  "${ROOT_DIR}/scripts/remote.sh" models --profile "$contract_profile" upload --model civitai-file 2>&1 >/dev/null)"
+upload_mismatch_status=$?
+set -e
+if [[ "$upload_mismatch_status" -ne 2 ]]; then
+  printf '%s\n' "$upload_mismatch_output" >&2
+  die "remote.sh models upload accepted local/remote catalog sha256 mismatch" 1
+fi
+if ! printf '%s\n' "$upload_mismatch_output" | grep -q 'local and remote catalog sha256 differ'; then
+  die "remote.sh models upload mismatch did not explain sha256 mismatch" 1
 fi
 missing_remote_profile="$contract_tmp_dir/no-remote.env"
 cat >"$missing_remote_profile" <<'EOF'

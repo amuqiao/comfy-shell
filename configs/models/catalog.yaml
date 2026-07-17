@@ -133,7 +133,6 @@ bundles:
           platform: unknown
         download:
           mode: manual
-          method: browser
           reason: PNG workflow 只包含文件名，未确认可信来源；请从作者说明或可信模型页下载到 target。
       - id: ultrasharp-upscale
         directory: upscale_models
@@ -143,7 +142,6 @@ bundles:
           platform: unknown
         download:
           mode: manual
-          method: browser
           reason: PNG workflow 只包含文件名；4x-UltraSharp.pth 可能是同类模型但未确认等价，不自动重命名。
       - id: easynegative-embedding
         directory: embeddings
@@ -178,10 +176,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-i2v-low-noise
         directory: diffusion_models
@@ -193,10 +187,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-i2v-lora-high-noise
         directory: loras
@@ -208,10 +198,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-i2v-lora-low-noise
         directory: loras
@@ -223,10 +209,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan21-vae
         directory: vae
@@ -238,10 +220,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/vae/wan_2.1_vae.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: umt5-xxl-fp8
         directory: text_encoders
@@ -253,10 +231,6 @@ bundles:
           repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
-          path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
 
   heroine-t2v-explore:
@@ -275,10 +249,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-t2v-low-noise
         directory: diffusion_models
@@ -290,10 +260,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-t2v-lora-high-noise
         directory: loras
@@ -305,10 +271,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-t2v-lora-low-noise
         directory: loras
@@ -320,10 +282,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan21-vae
         directory: vae
@@ -335,10 +293,6 @@ bundles:
           repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-          path: split_files/vae/wan_2.1_vae.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: umt5-xxl-fp8
         directory: text_encoders
@@ -350,8 +304,4 @@ bundles:
           repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
         download:
           mode: blocked
-          method: huggingface
-          repo_type: model
-          repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
-          path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
           reason: missing sha256；确认精确文件 hash 后才能自动下载。

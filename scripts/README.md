@@ -18,6 +18,21 @@ verify.sh               scripts 最小可重复校验
 当前阶段不提供 Docker 或第三方 custom nodes 管理入口。新增能力前，先判断它是否属于已有入口的子命令；只有职责边界不同、生命周期不同或安全边界不同，才新增顶层 `*.sh`。
 一次性脚手架和迁移工具放在 `tools/`，不算 `scripts/` 稳定操作入口。
 
+复杂脚本优先使用薄 shell 入口 + Python 子模块：
+
+```text
+scripts/models.sh           只定位 Python、展示 shell 层帮助、转发到 Python CLI
+scripts/models/cli.py       models.sh 的命令分发
+scripts/models/catalog.py   catalog schema、bundle/model selector、source/download 元信息
+scripts/models/status.py    status/verify 状态计算和人读输出
+scripts/models/plan.py      plan/info 输出
+scripts/models/workflow.py  PNG/JSON workflow 模型引用解析
+scripts/models/download.py  auto 下载、hash 校验、upload install 落位
+scripts/models/common.py    错误、配置读取、路径和文件校验公共函数
+```
+
+`scripts/lib/models_cli.py` 只保留兼容 wrapper，不再承载模型业务逻辑。
+
 ## 入口职责
 
 Shell 入口默认只负责：
@@ -106,11 +121,15 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 - `remote.sh sync/bootstrap/start/stop/restart` 会通过 SSH/rsync 修改远端 checkout
   或远端 ComfyUI 进程；默认目标来自 `.env` 的 `REMOTE_HOST` / `REMOTE_DIR`。
   `remote.sh status/ready/logs` 只读查看远端状态。
-- `remote.sh models [options] <check|list|status|verify|plan|download|logs>` 会通过 SSH
+- `remote.sh models [options] <check|list|list-models|status|verify|plan|download|upload|logs>` 会通过 SSH
   进入远端 checkout 并调用远端 `./scripts/models.sh ...`。其中 `download` 会在
   远端 `COMFY_MODEL_ROOT` 写模型文件；模型清单、hash 和目标目录仍由远端
   `models.sh` 负责。`download --detach` 会在远端后台运行, 写
   `.run/models-download-<bundle>.pid` 和 `logs/models-download-<bundle>.log`。
+  `download --model MODEL_ID --detach` 会写
+  `.run/models-download-model-<id>.pid` 和 `logs/models-download-model-<id>.log`。
+  `upload --model MODEL_ID` 会先校验本机模型文件, 再用 `rsync` 上传到远端临时文件,
+  最后由远端 `models.sh install-upload` 校验 hash 后落位; 不覆盖远端已存在但校验失败的文件。
   这里的 `--profile` 只用于本机 `remote.sh` 定位远端，不会传给远端
   `models.sh`；远端模型配置读取远端 checkout 根目录 `.env`。
 
@@ -118,7 +137,10 @@ REMOTE_GPU_CONNECT_TIMEOUT remote.sh gpu 默认 SSH ConnectTimeout
 
 ```bash
 ./scripts/remote.sh models check
+./scripts/remote.sh models list-models retro-anime-photo-core
 ./scripts/remote.sh models plan retro-anime-photo-core
+./scripts/remote.sh models download --model isabelia-v10-checkpoint --detach
+./scripts/remote.sh models upload --model isabelia-v10-checkpoint
 ./scripts/remote.sh models download retro-anime-photo-core --detach
 ./scripts/remote.sh models logs retro-anime-photo-core --follow
 ./scripts/remote.sh models verify retro-anime-photo-core

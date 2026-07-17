@@ -15,11 +15,14 @@ usage() {
 用法:
   ./scripts/models.sh check
   ./scripts/models.sh list
+  ./scripts/models.sh list-models [bundle]
   ./scripts/models.sh inspect <workflow.png|workflow.json>
-  ./scripts/models.sh status [bundle] [--profile FILE]
-  ./scripts/models.sh verify [bundle] [--profile FILE]
-  ./scripts/models.sh plan <bundle> [--profile FILE]
-  ./scripts/models.sh download <bundle> [--profile FILE]
+  ./scripts/models.sh status [bundle|--model MODEL_ID] [--profile FILE]
+  ./scripts/models.sh verify [bundle|--model MODEL_ID] [--profile FILE]
+  ./scripts/models.sh plan <bundle|--model MODEL_ID> [--profile FILE]
+  ./scripts/models.sh download <bundle|--model MODEL_ID> [--profile FILE]
+  ./scripts/models.sh info --model MODEL_ID [--profile FILE]
+  ./scripts/models.sh install-upload --model MODEL_ID --file FILE [--profile FILE]
   ./scripts/models.sh -h|--help
 
 作用域:
@@ -32,7 +35,7 @@ usage() {
 
 运行环境:
   Requires: Bash, 仓库根目录 .venv/bin/python
-  check/list/status/verify/plan/download 需要 .venv 中可 import PyYAML。
+  check/list/list-models/status/verify/plan/download/info/install-upload 需要 .venv 中可 import PyYAML。
   check 只校验 catalog schema, 不读取 .env, 不检查模型文件, 不访问网络。
   inspect 只解析 PNG/JSON workflow metadata, 不访问网络, 不猜下载源。
   download.method=huggingface 需要 hf CLI; 优先使用 .venv/bin/hf, 其次使用 HF_CLI 或 PATH 中的 hf。
@@ -45,16 +48,19 @@ usage() {
 命令:
   check               校验 catalog.yaml schema
   list                列出 catalog 中的 bundle
+  list-models [bundle] 列出 catalog 中的模型 id 和 target
   inspect <file>      从 PNG/workflow JSON 提取模型引用
-  plan <bundle>       解释 catalog 中这个 bundle 应准备什么
   status [bundle]     盘点 COMFY_MODEL_ROOT 中 catalog 声明的模型现状
+  plan <bundle>       解释 catalog 中这个 bundle 应准备什么
   verify [bundle]     严格校验模型是否可复现
   download <bundle>   显式下载 bundle 中的模型文件
+  info --model MODEL_ID 输出单模型 path/hash 信息
+  install-upload       校验上传临时文件后安装到 target, 通常由 remote.sh 调用
   help                显示本帮助
 
 配置与环境变量:
-  status/verify/plan/download 默认读取仓库根目录 .env。
-  --profile FILE      status/verify/plan/download 可显式指定其他配置文件。
+  status/verify/plan/download/info/install-upload 默认读取仓库根目录 .env。
+  --profile FILE      status/verify/plan/download/info/install-upload 可显式指定其他配置文件。
   .env.example        只是配置示例; 运行配置默认真源是 .env。
   COMFY_MODEL_ROOT    进程环境变量优先, 其次读取配置文件。
   HF_ENDPOINT         可选; 只影响 download.method=huggingface。示例: https://hf-mirror.com
@@ -63,21 +69,35 @@ usage() {
   HF_CLI              可选, 覆盖 hf CLI 路径
 
 副作用与保护边界:
-  check/list/inspect/status/verify/plan 只读, 不访问网络。
+  check/list/list-models/inspect/status/verify/plan/info 只读, 不访问网络。
   download 会创建模型子目录并写 auto 模型文件; 写入 COMFY_MODEL_ROOT 下的模型资产目录。
   manual/blocked 条目会跳过并输出下一步提示, 不会导致整个 download 提前中断。
   hash 不匹配、已有目标文件 hash 错误或网络下载失败时标记 failed, 不覆盖。
   download 必须由用户显式执行, 不修改 ComfyUI 已跟踪源码文件。
   所有相对模型路径按仓库根目录解析。
 
+状态词:
+  OK                  文件存在且 hash 正确。
+  Missing             文件缺失, 但 catalog 已有可信自动下载信息; 执行 download。
+  Manual              文件缺失, 但需要用户确认来源后手动下载到 target。
+  Blocked             catalog 信息不足或策略阻塞; 先补来源/hash。
+  Present Unverified  文件存在, 但 catalog 没有 hash 可校验。
+  Bad                 文件存在但 hash、大小或内容不符合 catalog。
+  Conflict            多个 bundle 对同一 target 的声明冲突。
+
 常用示例:
   ./scripts/models.sh check
   ./scripts/models.sh list
-  ./scripts/models.sh inspect '.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png'
-  ./scripts/models.sh plan retro-anime-photo-core
+  ./scripts/models.sh list-models retro-anime-photo-core
+  # 下方命令前提: .env 已配置 COMFY_MODEL_ROOT
   ./scripts/models.sh status retro-anime-photo-core
-  ./scripts/models.sh plan heroine-i2v-core  # 查看 blocked 条目
-  HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download retro-anime-photo-core
+  ./scripts/models.sh status --model isabelia-v10-checkpoint
+  ./scripts/models.sh plan retro-anime-photo-core
+  ./scripts/models.sh download --model isabelia-v10-checkpoint
+  ./scripts/models.sh verify --model isabelia-v10-checkpoint
+
+更多示例:
+  docs/tutorials/models-cheatsheet.md
 
 Exit Codes:
   0  成功
@@ -117,6 +137,21 @@ EOF
   列出 catalog 中的 bundle。list 会校验 catalog schema, 不读取配置文件。
 EOF
       ;;
+    list-models)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh list-models [bundle]
+  ./scripts/models.sh list-models -h|--help
+
+作用域:
+  列出 catalog 中的模型 id、target、download.mode 和 source。list-models 只读取 catalog,
+  不读取配置文件, 不检查模型文件, 不访问网络。
+
+常用示例:
+  ./scripts/models.sh list-models
+  ./scripts/models.sh list-models retro-anime-photo-core
+EOF
+      ;;
     inspect)
       cat <<'EOF'
 用法:
@@ -137,7 +172,7 @@ EOF
     status)
       cat <<'EOF'
 用法:
-  ./scripts/models.sh status [bundle] [--profile FILE]
+  ./scripts/models.sh status [bundle|--model MODEL_ID] [--profile FILE]
   ./scripts/models.sh status -h|--help
 
 作用域:
@@ -153,12 +188,13 @@ EOF
 常用示例:
   ./scripts/models.sh status
   ./scripts/models.sh status heroine-i2v-core
+  ./scripts/models.sh status --model isabelia-v10-checkpoint
 EOF
       ;;
     verify)
       cat <<'EOF'
 用法:
-  ./scripts/models.sh verify [bundle] [--profile FILE]
+  ./scripts/models.sh verify [bundle|--model MODEL_ID] [--profile FILE]
   ./scripts/models.sh verify -h|--help
 
 作用域:
@@ -172,17 +208,17 @@ EOF
 
 常用示例:
   ./scripts/models.sh verify retro-anime-photo-core
-  ./scripts/models.sh verify heroine-i2v-core
+  ./scripts/models.sh verify --model isabelia-v10-checkpoint
 EOF
       ;;
     plan)
       cat <<'EOF'
 用法:
-  ./scripts/models.sh plan <bundle> [--profile FILE]
+  ./scripts/models.sh plan <bundle|--model MODEL_ID> [--profile FILE]
   ./scripts/models.sh plan -h|--help
 
 作用域:
-  解释 catalog: 输出 target、source、download.mode 和 download.method, 不访问网络。
+  解释 catalog: 输出 target、source、download.mode; auto 条目会输出 download.method, 不访问网络。
   plan 不检查文件是否已经存在; 要看磁盘现状请用 status。
 
 配置:
@@ -192,18 +228,19 @@ EOF
 
 常用示例:
   ./scripts/models.sh plan retro-anime-photo-core
-  ./scripts/models.sh plan heroine-i2v-core
+  ./scripts/models.sh plan --model isabelia-v10-checkpoint
 EOF
       ;;
     download)
       cat <<'EOF'
 用法:
-  ./scripts/models.sh download <bundle> [--profile FILE]
+  ./scripts/models.sh download <bundle|--model MODEL_ID> [--profile FILE]
   ./scripts/models.sh download -h|--help
 
 作用域:
   显式下载 bundle 中 download.mode=auto 的模型文件。
   manual/blocked 会跳过并在 Summary/Next 中提示, 不会提前中断整个 bundle。
+  使用 --model 时只处理一个模型; manual/blocked 会返回非 0。
 
 配置:
   默认读取 .env; --profile FILE 可显式指定其他配置文件。
@@ -213,7 +250,32 @@ EOF
 
 常用示例:
   ./scripts/models.sh download retro-anime-photo-core
+  ./scripts/models.sh download --model isabelia-v10-checkpoint
   HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download retro-anime-photo-core
+EOF
+      ;;
+    info)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh info --model MODEL_ID [--profile FILE]
+  ./scripts/models.sh info -h|--help
+
+作用域:
+  输出单个模型的 catalog 信息和本机 target 路径。用于人工核对和 remote.sh models upload。
+  需要 COMFY_MODEL_ROOT, 不访问网络, 不写文件。
+
+常用示例:
+  ./scripts/models.sh info --model isabelia-v10-checkpoint
+EOF
+      ;;
+    install-upload)
+      cat <<'EOF'
+用法:
+  ./scripts/models.sh install-upload --model MODEL_ID --file FILE [--profile FILE]
+
+作用域:
+  校验 FILE 的 sha256/size 后安装到该 model 的 target。目标已存在且校验通过时跳过;
+  目标已存在但校验失败时拒绝覆盖。通常由 remote.sh models upload 调用。
 EOF
       ;;
     *)
@@ -232,7 +294,7 @@ case "$command" in
   -h|--help|help)
     usage
     ;;
-  check|list|inspect|status|verify|plan|download)
+  check|list|list-models|inspect|status|verify|plan|download|info|install-upload)
     shift
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
       command_usage "$command"
@@ -240,7 +302,8 @@ case "$command" in
     fi
     require_models_python
     export ROOT_DIR CONFIG_FILE CATALOG_FILE HF_CLI
-    exec "$PYTHON_BIN" "$ROOT_DIR/scripts/lib/models_cli.py" "$command" "$@"
+    PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}" PYTHONUNBUFFERED=1 \
+      exec "$PYTHON_BIN" -m scripts.models.cli "$command" "$@"
     ;;
   "")
     usage >&2

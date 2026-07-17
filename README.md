@@ -175,6 +175,7 @@ The tutorial path starts from the AI heroine short-video MVP and uses ComfyUI pa
 docs/tutorials/README.md
 docs/tutorials/ai-heroine-content-pipeline.md
 docs/tutorials/models.md
+docs/tutorials/models-cheatsheet.md
 ```
 
 The current mainline is an original AI heroine short-video production pipeline:

@@ -80,12 +80,13 @@ catalog.yaml
   -> 项目唯一的模型复现清单
   -> source.platform 记录来源平台, 例如 huggingface、civitai、liblib、unknown
   -> download.mode 决定脚本行为: auto、manual、blocked
-  -> download.method 决定下载方式: huggingface、civitai、browser
+  -> download.method 决定自动下载方式: huggingface、civitai
   -> auto 必须提供 sha256; huggingface 还需要 repo/path/repo_type; civitai 需要 download url
+  -> manual 表示需要用户通过浏览器等方式手动下载, 但它不是 download.method
 
 plan
   -> 只读解释 catalog
-  -> 输出 target、source、download.mode 和 download.method
+  -> 输出 target、source、download.mode；auto 条目会输出 download.method
   -> 不检查文件是否已经存在
   -> download.mode=manual 显示 manual 和 source page/target
   -> download.mode=blocked 显示 blocked 和阻塞原因
@@ -138,6 +139,8 @@ ComfyUI/models/upscale_models/     放大模型
 我不想每次都靠页面提示手工补模型
 ```
 
+只想复制本机或远端命令时，直接看 [模型命令速查](models-cheatsheet.md)。
+
 当前已落地的 bundle：
 
 | bundle | 作用 | 说明 |
@@ -152,16 +155,20 @@ ComfyUI/models/upscale_models/     放大模型
 ./scripts/models.sh inspect '.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png'
 ```
 
-只读查看。`check` 只校验 catalog schema；`list` 只读取 catalog；`plan` 解释 catalog；`status` 盘点模型目录；`verify` 做严格校验；`download` 只下载可自动下载的条目。`status`、`verify`、`plan` 和 `download` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`。
+只读查看。`check` 只校验 catalog schema；`list` 只读取 bundle；`list-models` 列出模型 id 和 target；`plan` 解释 catalog；`status` 盘点模型目录；`verify` 做严格校验；`download` 只下载可自动下载的条目；`info` 输出单模型 path/hash，主要给上传链路核对。`status`、`verify`、`plan`、`download` 和 `info` 默认读取 `.env`，并要求其中有 `COMFY_MODEL_ROOT`。
+如果只想处理单个模型，使用 catalog 里的稳定 `id`，不要按页面显示名或文件名模糊匹配。
 
 `.env.example` 只是复制生成 `.env` 的模板，不作为运行 profile：
 
 ```bash
 ./scripts/models.sh check
 ./scripts/models.sh list
+./scripts/models.sh list-models retro-anime-photo-core
 ./scripts/models.sh plan retro-anime-photo-core
+./scripts/models.sh plan --model isabelia-v10-checkpoint
 ./scripts/models.sh status
 ./scripts/models.sh status retro-anime-photo-core
+./scripts/models.sh status --model isabelia-v10-checkpoint
 ./scripts/models.sh verify retro-anime-photo-core
 ```
 
@@ -169,6 +176,7 @@ ComfyUI/models/upscale_models/     放大模型
 
 ```bash
 ./scripts/models.sh download retro-anime-photo-core
+./scripts/models.sh download --model isabelia-v10-checkpoint
 HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download retro-anime-photo-core
 ```
 
