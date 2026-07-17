@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """models.sh implementation.
 
-This module is intentionally invoked through scripts/models.sh. It uses the
-single repository .venv managed by scripts/local.sh bootstrap.
+This module is intentionally invoked through scripts/models.sh. It only manages
+model catalog assets for the comfy-shell wrapper; it does not bootstrap or run
+ComfyUI itself.
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ import struct
 import subprocess
 import sys
 import tempfile
+import urllib.request
+from urllib.parse import urlparse
 import zlib
 from pathlib import Path
 from typing import Any
@@ -25,6 +28,9 @@ ROOT_DIR = Path(os.environ.get("ROOT_DIR", Path(__file__).resolve().parents[2]))
 DEFAULT_CONFIG_FILE = ROOT_DIR / ".env"
 CATALOG_FILE = Path(os.environ.get("CATALOG_FILE", ROOT_DIR / "configs/models/catalog.yaml"))
 HF_CLI = os.environ.get("HF_CLI", "hf")
+VALID_DOWNLOAD_MODES = {"auto", "manual", "blocked"}
+VALID_AUTO_METHODS = {"huggingface", "civitai"}
+VALID_URL_SCHEMES = {"http", "https", "file"}
 
 
 class CliError(Exception):
@@ -42,7 +48,7 @@ def section(name: str) -> None:
 
 
 def event(kind: str, name: str, detail: str = "") -> None:
-    print(f"{kind:<10} {name:<18} {detail}")
+    print(f"{kind:<18} {name:<24} {detail}")
 
 
 def env_value_from(key: str, file_path: Path) -> str:
@@ -128,11 +134,107 @@ def load_yaml_module():
     return yaml
 
 
+def require_dict(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        die(f"invalid catalog: {label} must be a mapping", 2)
+    return value
+
+
+def require_str(mapping: dict[str, Any], key: str, label: str) -> str:
+    value = mapping.get(key)
+    if not isinstance(value, str) or not value:
+        die(f"invalid catalog: {label}.{key} is required", 2)
+    return value
+
+
+def validate_size_bytes(download: dict[str, Any], label: str) -> None:
+    if "size_bytes" not in download:
+        return
+    value = download["size_bytes"]
+    if not isinstance(value, int) or value <= 0:
+        die(f"invalid catalog: {label}.download.size_bytes must be a positive integer", 2)
+
+
+def validate_download_url(url: str, label: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in VALID_URL_SCHEMES:
+        die(
+            f"invalid catalog: {label}.download.url must use http, https, or file scheme",
+            2,
+        )
+    if parsed.scheme in {"http", "https"} and not parsed.netloc:
+        die(f"invalid catalog: {label}.download.url is missing host", 2)
+    if parsed.scheme == "file" and not parsed.path:
+        die(f"invalid catalog: {label}.download.url is missing file path", 2)
+
+
+def require_model_str(model: dict[str, Any], key: str, label: str) -> str:
+    value = model.get(key)
+    if not isinstance(value, str) or not value:
+        die(f"invalid catalog: {label}.{key} is required", 2)
+    return value
+
+
+def model_label(bundle_name: str, model: dict[str, Any], index: int) -> str:
+    return f"bundles.{bundle_name}.models[{index}]({model.get('id', '<missing-id>')})"
+
+
+def validate_model(bundle_name: str, model: dict[str, Any], index: int) -> None:
+    label = model_label(bundle_name, model, index)
+    require_model_str(model, "id", label)
+    require_model_str(model, "directory", label)
+    require_model_str(model, "filename", label)
+    source = require_dict(model.get("source"), f"{label}.source")
+    download = require_dict(model.get("download"), f"{label}.download")
+    require_str(source, "platform", f"{label}.source")
+    validate_size_bytes(download, label)
+    mode = require_str(download, "mode", f"{label}.download")
+    if mode not in VALID_DOWNLOAD_MODES:
+        die(f"invalid catalog: {label}.download.mode must be one of auto, manual, blocked", 2)
+    if mode == "auto":
+        method = require_str(download, "method", f"{label}.download")
+        if method not in VALID_AUTO_METHODS:
+            die(f"invalid catalog: unsupported auto download method for {model['id']}: {method}", 2)
+        require_str(download, "sha256", f"{label}.download")
+        if method == "huggingface":
+            require_str(download, "repo_type", f"{label}.download")
+            require_str(download, "repo", f"{label}.download")
+            remote_path = require_str(download, "path", f"{label}.download")
+            if Path(remote_path).name != str(model["filename"]):
+                die(
+                    f"invalid catalog: {label}.download.path basename must match filename: "
+                    f"{Path(remote_path).name} != {model['filename']}",
+                    2,
+                )
+        elif method == "civitai":
+            validate_download_url(require_str(download, "url", f"{label}.download"), label)
+    elif mode in {"manual", "blocked"}:
+        require_str(download, "reason", f"{label}.download")
+
+
+def validate_catalog(data: dict[str, Any]) -> None:
+    if data.get("version") != 2:
+        die("invalid catalog: version must be 2; old catalog schema is not supported", 2)
+    bundles = require_dict(data.get("bundles"), "bundles")
+    for bundle_name, bundle in bundles.items():
+        if not isinstance(bundle_name, str) or not bundle_name:
+            die("invalid catalog: bundle name must be a non-empty string", 2)
+        bundle_map = require_dict(bundle, f"bundles.{bundle_name}")
+        models = bundle_map.get("models")
+        if not isinstance(models, list):
+            die(f"invalid catalog: bundles.{bundle_name}.models must be a list", 2)
+        for index, model in enumerate(models):
+            validate_model(bundle_name, require_dict(model, f"bundles.{bundle_name}.models[{index}]"), index)
+
+
 def load_catalog() -> dict[str, Any]:
     require_catalog()
     yaml = load_yaml_module()
     with CATALOG_FILE.open("r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
+        data = yaml.safe_load(fh) or {}
+    data = require_dict(data, "catalog")
+    validate_catalog(data)
+    return data
 
 
 def bundle_items(data: dict[str, Any], bundle_name: str) -> list[tuple[str, dict[str, Any]]]:
@@ -142,6 +244,22 @@ def bundle_items(data: dict[str, Any], bundle_name: str) -> list[tuple[str, dict
             die(f"unknown bundle: {bundle_name}", 2)
         return [(bundle_name, bundles[bundle_name])]
     return sorted(bundles.items())
+
+
+def source_info(model: dict[str, Any]) -> dict[str, Any]:
+    return require_dict(model.get("source"), f"{model['id']}.source")
+
+
+def download_info(model: dict[str, Any]) -> dict[str, Any]:
+    return require_dict(model.get("download"), f"{model['id']}.download")
+
+
+def download_mode(model: dict[str, Any]) -> str:
+    return str(download_info(model)["mode"])
+
+
+def download_method(model: dict[str, Any]) -> str:
+    return str(download_info(model).get("method", ""))
 
 
 def model_path(model_root: Path, model: dict[str, Any]) -> Path:
@@ -156,39 +274,45 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def file_matches(path: Path, expected_sha: str, expected_size: Any) -> tuple[bool, str]:
+    if expected_size is not None and path.stat().st_size != int(expected_size):
+        return False, f"size mismatch: {path.stat().st_size} != {expected_size}"
+    actual_sha = file_sha256(path)
+    if actual_sha.lower() != expected_sha.lower():
+        return False, f"sha256 mismatch: {actual_sha}"
+    return True, f"sha256={actual_sha}"
+
+
 def model_state(model_root: Path, model: dict[str, Any], strict: bool = False) -> tuple[str, Path, str, bool]:
     path = model_path(model_root, model)
-    source = model.get("source", "huggingface")
-    expected_sha = model.get("sha256") or ""
-    expected_size = model.get("size_bytes")
-    note = model.get("note", "")
+    source = source_info(model)
+    download = download_info(model)
+    mode = str(download["mode"])
+    expected_sha = str(download.get("sha256") or "")
+    expected_size = download.get("size_bytes")
+    reason = str(download.get("reason") or "")
 
-    if source == "manual":
-        detail = note or "manual download required"
-        exists = path.is_file() and path.stat().st_size > 0
-        suffix = "present" if exists else "missing"
-        return ("MANUAL", path, f"{suffix}; {detail}", False)
-
-    if source == "huggingface" and not expected_sha:
-        exists = path.is_file() and path.stat().st_size > 0
-        suffix = "present" if exists else "missing"
-        return ("BLOCKED", path, f"{suffix}; missing sha256 in catalog", False)
+    if mode == "blocked":
+        suffix = "present" if path.is_file() and path.stat().st_size > 0 else "missing"
+        return ("BLOCKED", path, f"{suffix}; {reason}", False)
 
     if not path.is_file() or path.stat().st_size <= 0:
+        if mode == "manual":
+            return ("MANUAL", path, f"missing; {reason}", False)
         return ("MISSING", path, "file missing or empty", False)
 
-    if expected_size is not None and path.stat().st_size != int(expected_size):
-        return ("BAD", path, f"size mismatch: {path.stat().st_size} != {expected_size}", False)
+    if not expected_sha:
+        detail = "present; missing sha256, not verified"
+        if source.get("page_url"):
+            detail += f"; page={source['page_url']}"
+        if strict:
+            return ("MANUAL", path, detail, False)
+        return ("MANUAL", path, detail, False)
 
-    if expected_sha:
-        actual_sha = file_sha256(path)
-        if actual_sha.lower() != expected_sha.lower():
-            return ("BAD", path, f"sha256 mismatch: {actual_sha}", False)
-        return ("OK", path, f"sha256={actual_sha}", True)
-
-    if strict:
-        return ("BLOCKED", path, "missing sha256 in catalog", False)
-    return ("OK", path, "present", True)
+    ok, detail = file_matches(path, expected_sha, expected_size)
+    if ok:
+        return ("OK", path, detail, True)
+    return ("BAD", path, detail, False)
 
 
 def list_bundles() -> int:
@@ -213,36 +337,77 @@ def print_status(mode: str, bundle_name: str, config_file: Path) -> int:
     return 1 if failed else 0
 
 
+def source_summary(model: dict[str, Any]) -> str:
+    source = source_info(model)
+    platform = source["platform"]
+    parts = [str(platform)]
+    if source.get("creator"):
+        parts.append(f"creator={source['creator']}")
+    if source.get("model_id"):
+        parts.append(f"model_id={source['model_id']}")
+    if source.get("version_id"):
+        parts.append(f"version_id={source['version_id']}")
+    if source.get("page_url"):
+        parts.append(f"page={source['page_url']}")
+    return " ".join(parts)
+
+
+def print_model_plan(model_root: Path, model: dict[str, Any]) -> tuple[int, int, int]:
+    path = model_path(model_root, model)
+    download = download_info(model)
+    mode = str(download["mode"])
+    method = str(download.get("method", ""))
+    print(f"target: {model['id']} -> {path}")
+    print(f"source: {source_summary(model)}")
+
+    if mode == "auto":
+        if method == "huggingface":
+            size_info = (
+                f" size_bytes={download.get('size_bytes')}" if download.get("size_bytes") is not None else ""
+            )
+            print(
+                f"auto: method=huggingface repo={download['repo']} path={download['path']} "
+                f"repo_type={download['repo_type']} sha256={download['sha256']}{size_info}"
+            )
+        elif method == "civitai":
+            size_info = (
+                f" size_bytes={download.get('size_bytes')}" if download.get("size_bytes") is not None else ""
+            )
+            print(f"auto: method=civitai url={download['url']} sha256={download['sha256']}{size_info}")
+        return (1, 0, 0)
+
+    if mode == "manual":
+        print(f"manual: {download['reason']}")
+        if source_info(model).get("page_url"):
+            print(f"action: 打开 source page 下载, 放到 target 路径")
+        else:
+            print("action: 先确认可信来源和精确文件, 再放到 target 路径")
+        return (0, 1, 0)
+
+    print(f"blocked: {download['reason']}")
+    print("action: 补齐 catalog 的可信来源、sha256 或改为 manual")
+    return (0, 0, 1)
+
+
 def print_plan(bundle_name: str, config_file: Path) -> int:
     data = load_catalog()
     model_root = model_root_from_config(config_file)
     for name, bundle in bundle_items(data, bundle_name):
+        auto_count = manual_count = blocked_count = 0
         print(f"## {name} - {bundle.get('title', '')}")
         if bundle.get("blueprint"):
             print(f"blueprint: {bundle['blueprint']}")
         if bundle.get("tutorial"):
             print(f"tutorial: {bundle['tutorial']}")
         for model in bundle.get("models") or []:
-            source = model.get("source", "huggingface")
-            path = model_path(model_root, model)
-            if source == "manual":
-                note = model.get("note", "manual download required")
-                print(f"TARGET\t{model['id']}\t{path}")
-                print(f"MANUAL\t{model['id']}\t{note}")
-                continue
-            if source != "huggingface":
-                print(f"UNSUPPORTED\t{model['id']}\tsource={source}")
-                continue
-            print(f"TARGET\t{model['id']}\t{path}")
-            if not model.get("sha256"):
-                print(f"BLOCKED\t{model['id']}\tmissing sha256 in catalog; download disabled")
-                continue
-            repo_type = model.get("repo_type", "model")
-            size_info = f"\tsize_bytes={model.get('size_bytes')}" if model.get("size_bytes") is not None else ""
-            print(
-                f"HF\t{model['repo']}\t{model['path']}\trepo_type={repo_type}"
-                f"\tsha256={model['sha256']}{size_info}\t--local-dir {path.parent}"
-            )
+            auto_delta, manual_delta, blocked_delta = print_model_plan(model_root, model)
+            auto_count += auto_delta
+            manual_count += manual_delta
+            blocked_count += blocked_delta
+        print("Summary:")
+        print(f"  auto: {auto_count}")
+        print(f"  manual: {manual_count}")
+        print(f"  blocked: {blocked_count}")
     return 0
 
 
@@ -397,35 +562,69 @@ def hf_environment(config_file: Path) -> dict[str, str]:
     return env
 
 
-def download_rows(data: dict[str, Any], bundle_name: str, model_root: Path) -> list[dict[str, Any]]:
-    bundles = data.get("bundles") or {}
-    bundle = bundles.get(bundle_name)
-    if bundle is None:
-        die(f"unknown bundle: {bundle_name}", 2)
-    rows: list[dict[str, Any]] = []
-    for model in bundle.get("models") or []:
-        source = model.get("source", "huggingface")
-        row = {
-            "source": source,
-            "model_id": model["id"],
-            "repo": model.get("repo", ""),
-            "remote_path": model.get("path", ""),
-            "local_dir": model_root / model["directory"],
-            "filename": model["filename"],
-            "repo_type": model.get("repo_type", "model"),
-            "sha256": model.get("sha256", ""),
-            "size_bytes": model.get("size_bytes"),
-        }
-        if source == "manual":
-            rows.append(row)
-        elif source != "huggingface":
-            die(f"unsupported source for {model['id']}: {source}", 2)
-        elif not row["sha256"]:
-            row["source"] = "blocked"
-            rows.append(row)
-        else:
-            rows.append(row)
-    return rows
+def ensure_auto_file_ok(final_path: Path, expected_sha: str, expected_size: Any) -> tuple[bool, str]:
+    if not final_path.is_file():
+        return False, "missing"
+    if final_path.stat().st_size <= 0:
+        return False, "empty"
+    return file_matches(final_path, expected_sha, expected_size)
+
+
+def download_huggingface(
+    model: dict[str, Any],
+    tmp_dir: Path,
+    hf_cmd: list[str],
+    hf_env: dict[str, str],
+) -> Path:
+    download = download_info(model)
+    remote_path = str(download["path"])
+    args = hf_cmd + ["download", str(download["repo"]), remote_path, "--local-dir", str(tmp_dir)]
+    if str(download["repo_type"]) != "model":
+        args += ["--repo-type", str(download["repo_type"])]
+    result = subprocess.run(args, check=False, env=hf_env)
+    if result.returncode != 0:
+        die(f"hf download failed", 4)
+
+    remote_basename = Path(remote_path).name
+    candidates = [
+        tmp_dir / remote_basename,
+        tmp_dir / remote_path,
+    ]
+    downloaded_path = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if downloaded_path is None:
+        downloaded_path = next(tmp_dir.rglob(remote_basename), None)
+    if downloaded_path is None or not downloaded_path.is_file():
+        die(f"downloaded file not found after hf download: {remote_path}", 4)
+    return downloaded_path
+
+
+def download_url(model: dict[str, Any], tmp_dir: Path) -> Path:
+    download = download_info(model)
+    target = tmp_dir / model["filename"]
+    request = urllib.request.Request(
+        str(download["url"]),
+        headers={"User-Agent": "comfy-shell-models/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response, target.open("wb") as output:
+            shutil.copyfileobj(response, output, 1024 * 1024)
+    except OSError as exc:
+        die(f"url download failed: {exc}", 4)
+    return target
+
+
+def print_download_next(manual: int, blocked: int, failed: int) -> None:
+    print("Next:")
+    if manual:
+        print("  1. 按 manual 列表打开 source page 下载")
+        print("  2. 放到 target 路径")
+        print("  3. 重新执行 status 或 verify")
+    if blocked:
+        print("  - blocked 条目需要先补 catalog: 可信来源、sha256, 或改成 manual")
+    if failed:
+        print("  - failed 条目看上方错误原因, 修复网络、hash 或目标文件后重试")
+    if not manual and not blocked and not failed:
+        print("  - auto 条目已处理完成; 可执行 verify 做严格校验")
 
 
 def download_bundle(bundle_name: str, config_file: Path) -> int:
@@ -437,86 +636,94 @@ def download_bundle(bundle_name: str, config_file: Path) -> int:
     print_plan(bundle_name, config_file)
     section("Download")
 
-    failed = False
     hf_cmd: list[str] | None = None
-    for row in download_rows(data, bundle_name, model_root):
-        model_id = row["model_id"]
-        local_dir = Path(row["local_dir"])
-        filename = row["filename"]
+    stats = {
+        "success": 0,
+        "skipped_existing": 0,
+        "manual": 0,
+        "blocked": 0,
+        "failed": 0,
+    }
 
-        if row["source"] == "manual":
-            event("MANUAL", model_id, str(local_dir / filename))
+    bundle = (data.get("bundles") or {}).get(bundle_name)
+    if bundle is None:
+        die(f"unknown bundle: {bundle_name}", 2)
+
+    for model in bundle.get("models") or []:
+        model_id = model["id"]
+        final_path = model_path(model_root, model)
+        download = download_info(model)
+        mode = str(download["mode"])
+        method = str(download.get("method", ""))
+
+        if mode == "manual":
+            stats["manual"] += 1
+            source = source_info(model)
+            detail = f"{final_path}; {download['reason']}"
+            if source.get("page_url"):
+                detail += f"; page={source['page_url']}"
+            event("MANUAL", model_id, detail)
             continue
-        if row["source"] == "blocked":
-            event("BLOCKED", model_id, "missing sha256 in catalog")
-            failed = True
+
+        if mode == "blocked":
+            stats["blocked"] += 1
+            event("BLOCKED", model_id, f"{final_path}; {download['reason']}")
             continue
 
-        remote_path = row["remote_path"]
-        remote_basename = Path(remote_path).name
-        if remote_basename != filename:
-            die(
-                f"catalog filename does not match remote basename for {model_id}: "
-                f"{filename} != {remote_basename}",
-                2,
-            )
+        expected_sha = str(download["sha256"]).lower()
+        expected_size = download.get("size_bytes")
+        final_path.parent.mkdir(parents=True, exist_ok=True)
 
-        local_dir.mkdir(parents=True, exist_ok=True)
-        final_path = local_dir / filename
-        expected_sha = row["sha256"]
-        if final_path.is_file():
-            actual_sha = file_sha256(final_path)
-            if actual_sha == expected_sha:
-                event("OK", model_id, str(final_path))
+        if final_path.exists():
+            ok, detail = ensure_auto_file_ok(final_path, expected_sha, expected_size)
+            if ok:
+                stats["skipped_existing"] += 1
+                event("SKIPPED", model_id, str(final_path))
                 continue
-            die(f"existing model hash mismatch, refuse overwrite: {final_path}", 4)
+            stats["failed"] += 1
+            event("FAILED", model_id, f"existing target mismatch, refused overwrite: {detail}; {final_path}")
+            continue
 
-        if hf_cmd is None:
-            hf_cmd = resolve_hf_command()
-
-        event("DOWNLOAD", model_id, str(local_dir))
+        event("DOWNLOAD", model_id, f"method={method} target={final_path}")
         tmp_dir = Path(tempfile.mkdtemp(prefix="comfy-shell-model."))
         try:
-            args = hf_cmd + ["download", row["repo"], remote_path, "--local-dir", str(tmp_dir)]
-            if row["repo_type"] != "model":
-                args += ["--repo-type", row["repo_type"]]
-            result = subprocess.run(args, check=False, env=hf_env)
-            if result.returncode != 0:
-                die(f"hf download failed for {model_id}", 4)
+            try:
+                if method == "huggingface":
+                    if hf_cmd is None:
+                        hf_cmd = resolve_hf_command()
+                    downloaded_path = download_huggingface(model, tmp_dir, hf_cmd, hf_env)
+                elif method == "civitai":
+                    downloaded_path = download_url(model, tmp_dir)
+                else:
+                    die(f"unsupported download method: {method}", 2)
 
-            candidates = [
-                tmp_dir / remote_basename,
-                tmp_dir / remote_path,
-            ]
-            downloaded_path = next((candidate for candidate in candidates if candidate.is_file()), None)
-            if downloaded_path is None:
-                downloaded_path = next(tmp_dir.rglob(remote_basename), None)
-            if downloaded_path is None or not downloaded_path.is_file():
-                die(f"downloaded file not found after hf download: {remote_path}", 4)
-
-            actual_sha = file_sha256(downloaded_path)
-            if actual_sha != expected_sha:
-                die(f"downloaded hash mismatch for {model_id}: {actual_sha} != {expected_sha}", 4)
-
-            expected_size = row["size_bytes"]
-            if expected_size is not None and downloaded_path.stat().st_size != int(expected_size):
-                die(
-                    f"downloaded size mismatch for {model_id}: "
-                    f"{downloaded_path.stat().st_size} != {expected_size}",
-                    4,
-                )
-
-            final_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(downloaded_path), str(final_path))
-            event("OK", model_id, str(final_path))
+                ok, detail = file_matches(downloaded_path, expected_sha, expected_size)
+                if not ok:
+                    stats["failed"] += 1
+                    event("FAILED", model_id, detail)
+                    continue
+                shutil.move(str(downloaded_path), str(final_path))
+                stats["success"] += 1
+                event("SUCCESS", model_id, str(final_path))
+            except CliError as exc:
+                if exc.code == 2:
+                    raise
+                stats["failed"] += 1
+                event("FAILED", model_id, str(exc))
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    if failed:
-        die("some catalog entries are blocked; add sha256 or mark them manual", 2)
+    section("Summary")
+    print(f"success: {stats['success']}")
+    print(f"skipped_existing: {stats['skipped_existing']}")
+    print(f"manual: {stats['manual']}")
+    print(f"blocked: {stats['blocked']}")
+    print(f"failed: {stats['failed']}")
+    print_download_next(stats["manual"], stats["blocked"], stats["failed"])
 
     section("Status")
-    return print_status("status", bundle_name, config_file)
+    print_status("status", bundle_name, config_file)
+    return 4 if stats["failed"] else 0
 
 
 def main(argv: list[str]) -> int:

@@ -205,7 +205,7 @@ hf_sha="$(printf '%s' "$hf_payload" | python3 -c 'import hashlib, sys; print(has
 hf_size="$(printf '%s' "$hf_payload" | wc -c | tr -d ' ')"
 hf_catalog="$contract_tmp_dir/hf-catalog.yaml"
 cat >"$hf_catalog" <<EOF
-version: 1
+version: 2
 bundles:
   hf-endpoint-smoke:
     title: HF endpoint smoke
@@ -213,11 +213,17 @@ bundles:
       - id: endpoint-file
         directory: checkpoints
         filename: endpoint.bin
-        source: huggingface
-        repo: smoke/repo
-        path: endpoint.bin
-        sha256: $hf_sha
-        size_bytes: $hf_size
+        source:
+          platform: huggingface
+          repo: smoke/repo
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: smoke/repo
+          path: endpoint.bin
+          sha256: $hf_sha
+          size_bytes: $hf_size
 EOF
 hf_profile="$contract_tmp_dir/hf-profile.env"
 cat >"$hf_profile" <<'EOF'
@@ -262,6 +268,161 @@ COMFY_SHELL_HF_ENDPOINT_FILE="$hf_endpoint_file" CATALOG_FILE="$hf_catalog" HF_C
 if [[ "$(cat "$hf_endpoint_file")" != "https://env.example" ]]; then
   die "exported HF_ENDPOINT did not override profile for hf CLI" 1
 fi
+civitai_payload_file="$contract_tmp_dir/civitai-payload.bin"
+printf 'civitai-model-data' >"$civitai_payload_file"
+civitai_sha="$(python3 - "$civitai_payload_file" <<'PY'
+import hashlib
+import pathlib
+import sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
+civitai_size="$(wc -c <"$civitai_payload_file" | tr -d ' ')"
+civitai_catalog="$contract_tmp_dir/civitai-catalog.yaml"
+cat >"$civitai_catalog" <<EOF
+version: 2
+bundles:
+  civitai-smoke:
+    title: Civitai smoke
+    models:
+      - id: civitai-file
+        directory: loras
+        filename: civitai.bin
+        source:
+          platform: civitai
+          page_url: https://civitai.com/models/0/smoke
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file
+          sha256: $civitai_sha
+          size_bytes: $civitai_size
+      - id: manual-file
+        directory: vae
+        filename: manual.bin
+        source:
+          platform: unknown
+        download:
+          mode: manual
+          method: browser
+          reason: smoke manual entry
+      - id: blocked-file
+        directory: controlnet
+        filename: blocked.bin
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/smoke/repo
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: smoke/repo
+          path: blocked.bin
+          reason: smoke blocked entry
+EOF
+civitai_profile="$contract_tmp_dir/civitai-profile.env"
+cat >"$civitai_profile" <<'EOF'
+COMFY_MODEL_ROOT=/tmp/comfy-shell-civitai-profile-models
+EOF
+rm -rf /tmp/comfy-shell-civitai-profile-models
+set +e
+civitai_download_output="$(CATALOG_FILE="$civitai_catalog" "${ROOT_DIR}/scripts/models.sh" download civitai-smoke --profile "$civitai_profile" 2>&1)"
+civitai_download_status=$?
+set -e
+if [[ "$civitai_download_status" -ne 0 ]]; then
+  printf '%s\n' "$civitai_download_output" >&2
+  die "models.sh download did not skip manual/blocked entries while auto succeeded" 1
+fi
+if [[ ! -f /tmp/comfy-shell-civitai-profile-models/loras/civitai.bin ]]; then
+  die "models.sh download did not write civitai method target file" 1
+fi
+for expected_summary in 'success: 1' 'manual: 1' 'blocked: 1' 'failed: 0'; do
+  if ! printf '%s\n' "$civitai_download_output" | grep -q "$expected_summary"; then
+    die "models.sh download summary missing: $expected_summary" 1
+  fi
+done
+old_schema_catalog="$contract_tmp_dir/old-schema-catalog.yaml"
+cat >"$old_schema_catalog" <<EOF
+version: 1
+bundles:
+  old-schema:
+    title: Old schema
+    models:
+      - id: old-file
+        directory: checkpoints
+        filename: old.bin
+        source: huggingface
+        repo: smoke/repo
+        path: old.bin
+        sha256: $hf_sha
+EOF
+set +e
+old_schema_output="$(CATALOG_FILE="$old_schema_catalog" "${ROOT_DIR}/scripts/models.sh" plan old-schema --profile "$hf_profile" 2>&1 >/dev/null)"
+old_schema_status=$?
+set -e
+if [[ "$old_schema_status" -ne 2 ]]; then
+  die "models.sh accepted old catalog schema, expected exit 2" 1
+fi
+if ! printf '%s\n' "$old_schema_output" | grep -q 'version must be 2'; then
+  die "models.sh old schema rejection did not explain schema version" 1
+fi
+bad_civitai_url_catalog="$contract_tmp_dir/bad-civitai-url-catalog.yaml"
+cat >"$bad_civitai_url_catalog" <<EOF
+version: 2
+bundles:
+  bad-url:
+    title: Bad URL
+    models:
+      - id: bad-url-file
+        directory: loras
+        filename: bad.bin
+        source:
+          platform: civitai
+        download:
+          mode: auto
+          method: civitai
+          url: not-a-url
+          sha256: $civitai_sha
+EOF
+set +e
+bad_civitai_url_output="$(CATALOG_FILE="$bad_civitai_url_catalog" "${ROOT_DIR}/scripts/models.sh" plan bad-url --profile "$civitai_profile" 2>&1 >/dev/null)"
+bad_civitai_url_status=$?
+set -e
+if [[ "$bad_civitai_url_status" -ne 2 ]]; then
+  die "models.sh accepted bad civitai download.url, expected exit 2" 1
+fi
+if printf '%s\n' "$bad_civitai_url_output" | grep -q 'Traceback'; then
+  die "models.sh bad civitai download.url printed Python traceback" 1
+fi
+bad_size_catalog="$contract_tmp_dir/bad-size-catalog.yaml"
+cat >"$bad_size_catalog" <<EOF
+version: 2
+bundles:
+  bad-size:
+    title: Bad size
+    models:
+      - id: bad-size-file
+        directory: loras
+        filename: bad-size.bin
+        source:
+          platform: civitai
+        download:
+          mode: auto
+          method: civitai
+          url: file://$civitai_payload_file
+          sha256: $civitai_sha
+          size_bytes: nope
+EOF
+set +e
+bad_size_output="$(CATALOG_FILE="$bad_size_catalog" "${ROOT_DIR}/scripts/models.sh" plan bad-size --profile "$civitai_profile" 2>&1 >/dev/null)"
+bad_size_status=$?
+set -e
+if [[ "$bad_size_status" -ne 2 ]]; then
+  die "models.sh accepted bad size_bytes, expected exit 2" 1
+fi
+if printf '%s\n' "$bad_size_output" | grep -q 'Traceback'; then
+  die "models.sh bad size_bytes printed Python traceback" 1
+fi
 missing_model_profile="$contract_tmp_dir/no-model-root.env"
 cat >"$missing_model_profile" <<'EOF'
 COMFY_PROFILE=verify-missing-model-root
@@ -280,7 +441,7 @@ set -e
 if [[ "$missing_model_status" -ne 2 ]]; then
   die "models.sh plan without COMFY_MODEL_ROOT returned $missing_model_status, expected 2" 1
 fi
-if printf '%s\n' "$missing_model_output" | grep -q '^TARGET'; then
+if printf '%s\n' "$missing_model_output" | grep -q '^target:'; then
   die "models.sh plan without COMFY_MODEL_ROOT printed a target path" 1
 fi
 expect_status 2 "${ROOT_DIR}/scripts/models.sh" status --profile "$missing_model_profile"

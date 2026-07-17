@@ -78,20 +78,24 @@ inspect
 
 catalog.yaml
   -> 项目唯一的模型复现清单
-  -> source=manual 表示只记录文件名和目录, 用户自己下载
-  -> source=huggingface 必须提供 repo、path、filename、sha256
+  -> source.platform 记录来源平台, 例如 huggingface、civitai、liblib、unknown
+  -> download.mode 决定脚本行为: auto、manual、blocked
+  -> download.method 决定下载方式: huggingface、civitai、browser
+  -> auto 必须提供 sha256; huggingface 还需要 repo/path/repo_type; civitai 需要 download url
 
 plan/status
   -> 只读
-  -> manual 显示 MANUAL
-  -> huggingface 缺 sha256 显示 BLOCKED
+  -> download.mode=manual 显示 manual 和 source page/target
+  -> download.mode=blocked 显示 blocked 和阻塞原因
 
 verify
   -> 严格检查文件存在且 sha256 正确
-  -> MANUAL、BLOCKED、MISSING、BAD 都返回非 0
+  -> manual、blocked、missing、bad 都返回非 0
 
 download
-  -> 只下载 source=huggingface 且有 sha256 的条目
+  -> 只下载 download.mode=auto 的条目
+  -> 支持 download.method=huggingface 和 download.method=civitai
+  -> manual/blocked 会跳过, 最后输出 Summary 和 Next
   -> 文件名必须和 catalog filename 一致
   -> 下载后先校验 sha256, 再写入目标目录
   -> 不把相似文件重命名成 workflow 需要的文件名
@@ -131,7 +135,7 @@ ComfyUI/models/upscale_models/     放大模型
 
 | bundle | 作用 | 说明 |
 |---|---|---|
-| `retro-anime-photo-core` | 照片转复古动漫风格 | 从 `.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png` 解析；未知可信来源的模型保持 `manual`，缺 hash 的下载项会 `BLOCKED` |
+| `retro-anime-photo-core` | 照片转复古动漫风格 | 从 `.data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png` 解析；已确认的 Civitai/Hugging Face 条目为 `auto`，仍无法确认精确来源的条目为 `manual` |
 | `heroine-i2v-core` | 图生视频主线模型包 | 给 `scripts/models.sh` 用，不是页面模板 |
 | `heroine-t2v-explore` | 文生视频探索模型包 | 非主路径 |
 
@@ -153,11 +157,30 @@ ComfyUI/models/upscale_models/     放大模型
 显式下载：
 
 ```bash
-HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download heroine-i2v-core
+./scripts/models.sh download retro-anime-photo-core
+HF_ENDPOINT=https://hf-mirror.com ./scripts/models.sh download retro-anime-photo-core
 ```
 
-如果 `plan` 输出 `MANUAL`，说明 catalog 只记录了 workflow 文件名和目标目录，需要你按可信来源手动下载。
-如果输出 `BLOCKED`，说明 catalog 写了下载源但还没有 `sha256`，脚本会拒绝自动下载；确认精确文件后补齐 `sha256`，必要时再补 `size_bytes`。
+`HF_ENDPOINT` 只影响 `download.method=huggingface`，不影响 Civitai。
+
+如果 `plan` 输出 `manual`，说明 catalog 只记录了 workflow 文件名、目标目录和人工下载线索，需要你打开 source page 或作者说明手动下载。
+如果输出 `blocked`，说明 catalog 已知道线索但还不满足自动下载条件，例如缺少可信 `sha256`；确认精确文件后补齐 `sha256`，必要时再补 `size_bytes`。
+
+`download` 不会因为某个模型需要手动下载就整体中断。它会继续处理可自动下载的条目，最后输出类似：
+
+```text
+Summary:
+success: 4
+skipped_existing: 0
+manual: 2
+blocked: 0
+failed: 0
+
+Next:
+  1. 按 manual 列表打开 source page 下载
+  2. 放到 target 路径
+  3. 重新执行 status 或 verify
+```
 
 注意：
 

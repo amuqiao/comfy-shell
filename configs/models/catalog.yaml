@@ -1,83 +1,166 @@
-version: 1
+version: 2
 
 defaults:
   root_env: COMFY_MODEL_ROOT
   root: ./ComfyUI/models
-  source: huggingface
 
 bundles:
   retro-anime-photo-core:
     title: 批量照片转绘复古动漫风格
     tutorial: .data/nodes/批量照片转绘复古动漫风格（LoRA+ControlNet+UltimateSDUpscale）.png
-    description: 从 PNG workflow 解析出的 SD1.5 复古动漫风格照片转绘模型清单。未知可信来源的条目标记为 manual。
+    description: 从 PNG workflow 解析出的 SD1.5 复古动漫风格照片转绘模型清单。来源和下载能力分开记录。
+    source_notes:
+      - name: AWPaiting
+        relation: 视频课程提到的绘图模型；当前 PNG workflow 未引用该文件名，不作为本 bundle 必需模型。
+        platform: civitai
+        page_url: https://civitai.com/models/84476/awpainting
+        alternate_page_url: https://liblib.art/modelinfo/1fd281cf6bcf01b95033c03b471d8fd8
+      - name: majicMIX lux
+        relation: 视频课程提到的绘图模型；当前 PNG workflow 未引用该文件名，不作为本 bundle 必需模型。
+        platform: civitai
+        page_url: https://civitai.com/models/56967/majicmix-lux
+        alternate_page_url: https://liblib.art/modelinfo/c6cfead266b9b38cd8257655ca76dbc2
     models:
       - id: isabelia-v10-checkpoint
         directory: checkpoints
         filename: isabelia_v10.safetensors
-        source: manual
-        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 checkpoints。
         required: true
+        source:
+          platform: civitai
+          page_url: https://civitai.com/models/189416/isabelia
+          creator: Isabelia
+          model_id: 189416
+          version_id: 212741
+          model_name: Isabelia
+          version_name: v1.0
+        download:
+          mode: auto
+          method: civitai
+          url: https://civitai.com/api/download/models/212741
+          sha256: c5d79f2d8c33c8ed157736b87acd5c7a0a4f51cca77a1712b55756ba82fbd89a
+          size_bytes: 5505438638
       - id: eighties-fusion-lora
         directory: loras
         filename: 80'sFusion.safetensors
-        source: manual
-        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 loras。
         required: true
+        source:
+          platform: civitai
+          page_url: https://civitai.com/models/112241?modelVersionId=123524
+          creator: ForkY
+          model_id: 112241
+          version_id: 123524
+          model_name: 80'sFusion
+          version_name: v2.0
+          trigger_words:
+            - "<lora:80'sFusion:0.6>"
+        download:
+          mode: auto
+          method: civitai
+          url: https://civitai.com/api/download/models/123524
+          sha256: 43eb2c015f6f116af8030bb9b14e0be7ed7f695daa0830ff1412344ed89fbfad
+          size_bytes: 151111824
       - id: retro-anime-lora
         directory: loras
         filename: Retro_Anime-000002.safetensors
-        source: manual
-        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 loras。
         required: true
+        source:
+          platform: civitai
+          page_url: https://civitai.com/models/211819/retro-anime
+          creator: Isabelia
+          model_id: 211819
+          version_id: 238615
+          model_name: Retro Anime
+          version_name: Retro Anime
+        download:
+          mode: auto
+          method: civitai
+          url: https://civitai.com/api/download/models/238615
+          sha256: 4bf2bb55ecccf7eb1a5509884e44620c1388ca29d122041d28724abdbc3cd7e0
+          size_bytes: 37870304
       - id: sd15-controlnet-openpose
         directory: controlnet
         filename: control_v11p_sd15_openpose.pth
-        source: huggingface
-        repo: lllyasviel/ControlNet-v1-1
-        path: control_v11p_sd15_openpose.pth
-        sha256: db97becd92cd19aff71352a60e93c2508decba3dee64f01f686727b9b406a9dd
-        size_bytes: 1445235707
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/lllyasviel/ControlNet-v1-1
+          repo: lllyasviel/ControlNet-v1-1
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: lllyasviel/ControlNet-v1-1
+          path: control_v11p_sd15_openpose.pth
+          sha256: db97becd92cd19aff71352a60e93c2508decba3dee64f01f686727b9b406a9dd
+          size_bytes: 1445235707
       - id: sd15-controlnet-depth
         directory: controlnet
         filename: control_v11f1p_sd15_depth.pth
-        source: huggingface
-        repo: lllyasviel/ControlNet-v1-1
-        path: control_v11f1p_sd15_depth.pth
-        sha256: 761077ffe369fe8cf16ae353f8226bd4ca29805b161052f82c0170c7b50f1d99
-        size_bytes: 1445235365
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/lllyasviel/ControlNet-v1-1
+          repo: lllyasviel/ControlNet-v1-1
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: lllyasviel/ControlNet-v1-1
+          path: control_v11f1p_sd15_depth.pth
+          sha256: 761077ffe369fe8cf16ae353f8226bd4ca29805b161052f82c0170c7b50f1d99
+          size_bytes: 1445235365
       - id: sd15-controlnet-lineart
         directory: controlnet
         filename: control_v11p_sd15_lineart.pth
-        source: huggingface
-        repo: lllyasviel/ControlNet-v1-1
-        path: control_v11p_sd15_lineart.pth
-        sha256: fb5fb912696830da948e5056b50adfa3fcc68ff760c43e4e7a8499853af43c61
-        size_bytes: 1445235365
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/lllyasviel/ControlNet-v1-1
+          repo: lllyasviel/ControlNet-v1-1
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: model
+          repo: lllyasviel/ControlNet-v1-1
+          path: control_v11p_sd15_lineart.pth
+          sha256: fb5fb912696830da948e5056b50adfa3fcc68ff760c43e4e7a8499853af43c61
+          size_bytes: 1445235365
       - id: anime-vae-kl-f8-anime2
         directory: vae
         filename: kl-f8-anime2.ckpt
-        source: manual
-        note: PNG workflow 只包含文件名, 未确认可信下载源; 手动下载到 vae。
         required: true
+        source:
+          platform: unknown
+        download:
+          mode: manual
+          method: browser
+          reason: PNG workflow 只包含文件名，未确认可信来源；请从作者说明或可信模型页下载到 target。
       - id: ultrasharp-upscale
         directory: upscale_models
         filename: 4xUltrasharp_4xUltrasharpV10.pth
-        source: manual
-        note: PNG workflow 只包含文件名; 4x-UltraSharp.pth 可能是同类模型但未确认等价, 不自动重命名。
         required: true
+        source:
+          platform: unknown
+        download:
+          mode: manual
+          method: browser
+          reason: PNG workflow 只包含文件名；4x-UltraSharp.pth 可能是同类模型但未确认等价，不自动重命名。
       - id: easynegative-embedding
         directory: embeddings
         filename: EasyNegative.safetensors
-        source: huggingface
-        repo_type: dataset
-        repo: gsdf/EasyNegative
-        path: EasyNegative.safetensors
-        sha256: c74b4e810b030f6b75fde959e2db678c268d07115b85356d3c0138ba5eb42340
-        size_bytes: 24655
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/datasets/gsdf/EasyNegative
+          repo: gsdf/EasyNegative
+        download:
+          mode: auto
+          method: huggingface
+          repo_type: dataset
+          repo: gsdf/EasyNegative
+          path: EasyNegative.safetensors
+          sha256: c74b4e810b030f6b75fde959e2db678c268d07115b85356d3c0138ba5eb42340
+          size_bytes: 24655
 
   heroine-i2v-core:
     title: AI 女主图生视频主线
@@ -88,45 +171,93 @@ bundles:
       - id: wan22-i2v-high-noise
         directory: diffusion_models
         filename: wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-i2v-low-noise
         directory: diffusion_models
         filename: wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-i2v-lora-high-noise
         directory: loras
         filename: wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-i2v-lora-low-noise
         directory: loras
         filename: wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan21-vae
         directory: vae
         filename: wan_2.1_vae.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/vae/wan_2.1_vae.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/vae/wan_2.1_vae.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: umt5-xxl-fp8
         directory: text_encoders
         filename: umt5_xxl_fp8_e4m3fn_scaled.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
-        path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged
+          repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
+          path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
 
   heroine-t2v-explore:
     title: AI 女主文生视频探索
@@ -137,42 +268,90 @@ bundles:
       - id: wan22-t2v-high-noise
         directory: diffusion_models
         filename: wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-t2v-low-noise
         directory: diffusion_models
         filename: wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-t2v-lora-high-noise
         directory: loras
         filename: wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan22-t2v-lora-low-noise
         directory: loras
         filename: wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: wan21-vae
         directory: vae
         filename: wan_2.1_vae.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
-        path: split_files/vae/wan_2.1_vae.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.2_ComfyUI_Repackaged
+          path: split_files/vae/wan_2.1_vae.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
       - id: umt5-xxl-fp8
         directory: text_encoders
         filename: umt5_xxl_fp8_e4m3fn_scaled.safetensors
-        source: huggingface
-        repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
-        path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
         required: true
+        source:
+          platform: huggingface
+          page_url: https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged
+          repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
+        download:
+          mode: blocked
+          method: huggingface
+          repo_type: model
+          repo: Comfy-Org/Wan_2.1_ComfyUI_repackaged
+          path: split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+          reason: missing sha256；确认精确文件 hash 后才能自动下载。
