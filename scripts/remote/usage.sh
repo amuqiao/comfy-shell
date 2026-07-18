@@ -293,7 +293,7 @@ usage_tunnel() {
   --local-port PORT      覆盖 REMOTE_TUNNEL_LOCAL_PORT。
   --remote-host HOST     覆盖 REMOTE_TUNNEL_REMOTE_HOST。
   --remote-port PORT     覆盖 REMOTE_TUNNEL_REMOTE_PORT。
-  --dry-run              只打印 ssh -L 命令, 不建立隧道。
+  --dry-run              只打印访问 URL、转发关系和 ssh -L 命令, 不建立隧道。
   -h, --help             显示本帮助。
 
 配置与环境变量:

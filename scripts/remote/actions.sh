@@ -335,6 +335,10 @@ handle_remote_tunnel() {
   validate_simple_host "--remote-host" "$remote_host"
   require_cmd ssh
   ssh_args=(ssh -o ConnectTimeout=10 -o ExitOnForwardFailure=yes -N -L "${local_port}:${remote_host}:${remote_port}" "$host")
+  section "Tunnel"
+  event "URL" "web" "http://127.0.0.1:${local_port}/"
+  event "FORWARD" "local" "127.0.0.1:${local_port} -> ${remote_host}:${remote_port} via ${host}"
+  event "HOLD" "terminal" "keep this command running while using the tunnel"
   print_command "${ssh_args[@]}"
   if [[ "$dry_run" == true ]]; then
     exit 0
